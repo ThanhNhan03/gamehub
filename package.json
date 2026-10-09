@@ -10,12 +10,14 @@
     "dev": "pnpm --parallel --filter @gamehub/web --filter @gamehub/server dev",
     "build": "pnpm -r build",
     "start": "node apps/server/dist/index.js",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.scripts.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:smoke": "tsx scripts/smoke.ts"
+    "test:smoke": "tsx scripts/smoke.ts",
+    "test:phase1": "pnpm build && tsx scripts/phase1.ts",
+    "test:phase1:long": "pnpm build && tsx scripts/phase1.ts --long"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

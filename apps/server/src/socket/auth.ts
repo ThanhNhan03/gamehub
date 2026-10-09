@@ -2,6 +2,7 @@ import { z } from 'zod';
 export const identitySchema = z
   .object({
     playerId: z.uuid(),
+    sessionToken: z.uuid(),
     nickname: z.string().trim().min(1).max(24),
     avatar: z.number().int().min(0).max(7),
     accessCode: z.string().max(128).optional(),

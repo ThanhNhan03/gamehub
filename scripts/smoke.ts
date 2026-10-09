@@ -9,7 +9,10 @@ import type {
 
 const origin = process.env.TEST_URL ?? 'http://localhost:3001';
 const sockets: Socket<ServerEvents, ClientEvents>[] = [];
-function client(playerId = randomUUID()) {
+function client(playerId: string = randomUUID()) {
+  const existing = sockets.find(
+    (s) => (s.auth as { playerId: string }).playerId === playerId,
+  );
   const socket: Socket<ServerEvents, ClientEvents> = io(origin, {
     autoConnect: false,
     forceNew: true,
@@ -18,6 +21,9 @@ function client(playerId = randomUUID()) {
     transports: ['websocket'],
     auth: {
       playerId,
+      sessionToken: existing
+        ? (existing.auth as { sessionToken: string }).sessionToken
+        : randomUUID(),
       nickname: 'Smoke test',
       avatar: 0,
       accessCode: process.env.TEST_ACCESS_CODE ?? '',

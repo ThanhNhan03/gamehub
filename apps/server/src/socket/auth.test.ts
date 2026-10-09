@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { authenticate } from './auth.js';
 
 const identity = {
+  sessionToken: '5d661efe-1c6b-4e47-8d09-04c8e3432acf',
   playerId: '8b6e79ef-4f80-4862-8213-8d4828a4ccdf',
   nickname: '  Minh  ',
   avatar: 2,
