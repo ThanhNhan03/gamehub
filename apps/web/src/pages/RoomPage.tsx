@@ -29,11 +29,14 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
     return () => clearInterval(timer);
   }, []);
   useEffect(() => {
+    if (room?.code === code) {
+      attempted.current = code;
+      return;
+    }
     if (
       !connected ||
       restoring ||
       !!roomError ||
-      room?.code === code ||
       session.roomCode === code ||
       attempted.current === code
     )
@@ -56,6 +59,7 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
     notify,
   ]);
   async function leave() {
+    attempted.current = code;
     setPending(true);
     const result = await request('room:leave', {});
     setPending(false);
