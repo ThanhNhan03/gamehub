@@ -95,7 +95,11 @@ importers:
         specifier: ^7.3.0
         version: 7.3.7(@types/node@24.19.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15)
 
-  packages/shared: {}
+  packages/shared:
+    dependencies:
+      pokersolver:
+        specifier: 2.1.4
+        version: 2.1.4
 
 packages:
 
@@ -1349,6 +1353,10 @@ packages:
   picomatch@4.0.7:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
+
+  pokersolver@2.1.4:
+    resolution: {integrity: sha512-vmgZS+K8H8r1RePQykFM5YyvlKo1v3xVec8FMBjg9N6mR2Tj/n/X415w+lG67FWbrk71D/CADmKFinDgaQlAsw==}
+    engines: {'0': node >= 4.0.0}
 
   postcss@8.5.29:
     resolution: {integrity: sha512-49cGhUbXj8Qenv0iTMxA1cFBzxXoctpC9Ujd77t1WcbJIr6nF/eI7g/8MgxrYldFRuAXvja7xQRwavoW7kgrxQ==}
@@ -2851,6 +2859,8 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@4.0.7: {}
+
+  pokersolver@2.1.4: {}
 
   postcss@8.5.29:
     dependencies:

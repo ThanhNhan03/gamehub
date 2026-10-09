@@ -5,6 +5,8 @@ import { useGameStore } from '../store/useGameStore';
 import { request } from '../lib/socket';
 import { Button } from './UI';
 import { Icon } from './Art';
+import { createPlayerLabels } from '../lib/playerNames';
+import { PlayerName } from './PlayerName';
 export function ChatPanel({
   room,
   notify,
@@ -13,6 +15,7 @@ export function ChatPanel({
   notify: (text: string) => void;
 }) {
   const [text, setText] = useState('');
+  const { codeFor } = createPlayerLabels(room);
   const inputId = useId();
   const [sending, setSending] = useState(false);
   const connected = useGameStore((s) => s.connected);
@@ -51,7 +54,12 @@ export function ChatPanel({
             >
               <div>
                 <strong>
-                  {message.playerId === playerId ? 'Bạn' : message.nickname}
+                  <PlayerName
+                    nickname={
+                      message.playerId === playerId ? 'Bạn' : message.nickname
+                    }
+                    code={codeFor(message.playerId, message.nickname)}
+                  />
                 </strong>
                 <time dateTime={new Date(message.sentAt).toISOString()}>
                   {new Date(message.sentAt).toLocaleTimeString('vi-VN', {

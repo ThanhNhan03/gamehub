@@ -6,6 +6,6 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src"],
+  "include": ["src", "../../packages/shared/src/games/poker/pokersolver.d.ts"],
   "exclude": ["src/**/*.test.ts"]
 }

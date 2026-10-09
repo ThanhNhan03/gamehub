@@ -7,10 +7,21 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./poker": {
+      "types": "./src/games/poker/logic.ts",
+      "default": "./dist/games/poker/logic.js"
+    },
+    "./poker-constants": {
+      "types": "./src/games/poker/constants.ts",
+      "default": "./dist/games/poker/constants.js"
     }
   },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pokersolver": "2.1.4"
   }
 }

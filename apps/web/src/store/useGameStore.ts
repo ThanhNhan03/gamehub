@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import type { RoomView, CaroView, LobbyState } from '@gamehub/shared';
+import type { RoomView, GameView, LobbyState } from '@gamehub/shared';
 export const useGameStore = create<{
   connected: boolean;
   authorized: boolean;
   connecting: boolean;
   restoring: boolean;
   room: RoomView | null;
-  game: CaroView | null;
+  game: GameView | null;
   lobby: LobbyState;
   error: string;
   roomError: string;

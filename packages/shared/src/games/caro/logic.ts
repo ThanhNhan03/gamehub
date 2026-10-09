@@ -10,6 +10,7 @@ export interface CaroAction {
   col: number;
 }
 export interface CaroState {
+  gameId: 'caro';
   players: PlayerInfo[];
   board: (Mark | null)[];
   turnId: string;
@@ -45,6 +46,7 @@ export const caro: GameModule<
     if (players.length !== 2 || new Set(players.map((p) => p.id)).size !== 2)
       throw new Error('Caro requires two distinct players');
     return {
+      gameId: 'caro',
       players: players.map((p) => ({ ...p })),
       board: Array<Mark | null>(CARO_SIZE ** 2).fill(null),
       turnId: players[0]!.id,

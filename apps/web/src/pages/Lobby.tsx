@@ -28,12 +28,13 @@ export function Lobby({
   const { lobby, room } = useGameStore();
   const playerId = useSession((state) => state.playerId);
   const navigate = useNavigate();
-  async function createRoom() {
+  async function createRoom(gameId: 'caro' | 'poker' = 'caro') {
     setBusy(true);
-    const result = await request('room:create', {
-      gameId: 'caro',
-      maxPlayers: 2,
-    });
+    const payload =
+      gameId === 'poker'
+        ? { gameId: 'poker' as const, maxPlayers: 8 as const }
+        : { gameId: 'caro' as const, maxPlayers: 2 as const };
+    const result = await request('room:create', payload);
     setBusy(false);
     if (!result.ok) notify(result.error.message);
     else {
@@ -203,15 +204,15 @@ export function Lobby({
               <h3>{g.name}</h3>
               <p>{g.line}</p>
               <Button className="full-width" onClick={() => setSelected(g.id)}>
-                {g.id === 'caro' ? 'Chơi ngay' : 'Khám phá'}{' '}
+                {g.id === 'caro' || g.id === 'poker' ? 'Chơi ngay' : 'Khám phá'}{' '}
                 <Icon name="arrow" size={20} />
               </Button>
             </motion.article>
           ))}
         </div>
         <p className="release-note">
-          <span className="label-pill">CARO ĐÃ MỞ BÀN</span> Rủ một đồng nghiệp,
-          làm một ván thôi!
+          <span className="label-pill">CARO &amp; POKER ĐÃ MỞ BÀN</span> Rủ đồng
+          nghiệp, làm một ván thôi!
         </p>
       </section>
       <section className="rooms-section" aria-labelledby="rooms-title">
@@ -228,7 +229,7 @@ export function Lobby({
               <div className="room-row panel" key={r.code}>
                 <span className="room-code-badge">{r.code}</span>
                 <div>
-                  <h3>Cờ caro</h3>
+                  <h3>{games.find((game) => game.id === r.gameId)?.name}</h3>
                   <p>
                     Chủ phòng: {r.hostName} · {r.count}/{r.maxPlayers} người ·{' '}
                     {r.spectatorCount} đang xem ·{' '}
@@ -306,7 +307,7 @@ export function Lobby({
                   : 'Texas Hold’em. Mỗi người bắt đầu với 1.000 chip ảo. Chip ảo, chơi cho vui, không quy đổi tiền.'}
           </p>
           <div className="notice">
-            {game.id === 'caro'
+            {game.id === 'caro' || game.id === 'poker'
               ? 'Chơi cùng một đồng nghiệp thật. Gửi link mời rồi bắt đầu!'
               : 'Bàn chơi đang được chuẩn bị. Mọi đối thủ đều là đồng nghiệp thật.'}
           </div>
@@ -315,15 +316,17 @@ export function Lobby({
             color={game.color}
             disabled={busy}
             onClick={() => {
-              if (game.id === 'caro') {
-                void createRoom();
+              if (game.id === 'caro' || game.id === 'poker') {
+                void createRoom(game.id);
                 return;
               }
               setSelected(null);
               onProfile();
             }}
           >
-            {game.id === 'caro' ? 'Tạo phòng Cờ caro' : 'Chuẩn bị tên & avatar'}
+            {game.id === 'caro' || game.id === 'poker'
+              ? `Tạo phòng ${game.name}`
+              : 'Chuẩn bị tên & avatar'}
           </Button>
         </Dialog>
       )}
@@ -337,8 +340,8 @@ export function Lobby({
                 className={`game-choice bg-${g.color}`}
                 disabled={busy}
                 onClick={() => {
-                  if (g.id === 'caro') {
-                    void createRoom();
+                  if (g.id === 'caro' || g.id === 'poker') {
+                    void createRoom(g.id);
                     return;
                   }
                   setCreate(false);
@@ -355,8 +358,9 @@ export function Lobby({
             ))}
           </div>
           <div className="notice">
-            Cờ caro: 2 người · bàn 15 × 15 · 30 giây mỗi nước. Các trò khác sẽ
-            mở lần lượt.
+            Cờ caro dành cho 2 người; Poker Texas Hold’em nhận 2–8 người, blind
+            10/20 và 30 giây mỗi lượt. Chip chỉ dùng để chơi vui, không quy đổi
+            tiền.
           </div>
         </Dialog>
       )}

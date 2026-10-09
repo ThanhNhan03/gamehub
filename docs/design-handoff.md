@@ -62,6 +62,12 @@ Phòng chờ dùng cùng shell, màu, SVG và nét viền của Lobby, có 2 gh�
 
 Spectator dùng nút biểu tượng mắt ở danh sách phòng hoặc cạnh ô nhập mã trong sảnh; spectator không chiếm ghế, có thể theo dõi bàn và cùng chat với người chơi. Chat desktop rộng hơn và cao hơn; mobile dùng sheet cao hơn để đọc hội thoại thuận tiện.
 
-Khi phòng có ghế trống, bất kỳ người chơi nào cũng có nút mời cạnh tên spectator. Spectator có thể gửi/yêu cầu rút yêu cầu; người chơi trong phòng có thể duyệt hoặc bỏ qua. Lời mời có chấp nhận/từ chối; chỉ chuyển vai trò sang người chơi khi ván đã kết thúc hoặc phòng đang chờ.
+Khi phòng có ghế trống, bất kỳ người chơi nào cũng có nút mời cạnh tên spectator. Spectator có thể gửi/yêu cầu rút yêu cầu; người chơi trong phòng có thể duyệt hoặc bỏ qua. Lời mời có chấp nhận/từ chối. Với Poker, spectator có thể tự nhận ghế trong lúc chơi hoặc nhận lời mời, nhưng chỉ được chia bài từ ván sau; Caro giữ quy tắc nhận ghế sau khi ván kết thúc hoặc phòng đang chờ.
 
-Các trò khác và component riêng của chúng vẫn chờ phase tương ứng. Phiên bản này có người chơi và phòng thực qua kết nối; client test ở `scripts/` nằm ngoài sản phẩm.
+## Bàn Poker
+
+Texas Hold’em dùng mặt nỉ xanh oval, avatar tròn quanh bàn, pot và năm vị trí bài chung ở giữa, bài của bạn xòe trên avatar dưới cùng. Bàn thích ứng với 2–8 người và màn hình nhỏ; bài đối thủ úp cho đến showdown. Mốc Preflop / Flop / Turn / River / Showdown cho biết vòng hiện tại. Thanh hành động nằm dưới bàn, có Fold, Check/Call, Bet/Raise, thanh chọn mức cược và các mốc ½ Pot, Pot, All-in. Khung chat desktop và sheet chat mobile giữ nguyên; không có nhật ký ván. Khi kết thúc ván, bàn và bài vẫn hiển thị cùng kết quả chia chip và pháo bông. Hiệu ứng tôn trọng giảm chuyển động.
+
+Chủ phòng có nút Game mới trong thanh công cụ để reset ngay, có hộp thoại giải thích cấp lại 1.000 chip cho mỗi người. Người rời phòng không còn avatar trên bàn; ghế mới nhận có nhãn Chờ ván sau. Popup vai trò hiển thị đầu ván, tự đóng sau 6 giây và có nút đóng; ở bàn hai người Dealer đồng thời là Small Blind.
+
+Số chip, lượt, countdown, kết quả, pot phụ và nhãn bài đều được đồng bộ từ server. Thông tin “Chip ảo, chơi cho vui, không quy đổi tiền” xuất hiện trên bàn. Phase 2 Tam sao thất bản và Phase 3 Cá ngựa cùng component riêng vẫn chờ triển khai; client test của Poker nằm trong `scripts/`, ngoài sản phẩm.

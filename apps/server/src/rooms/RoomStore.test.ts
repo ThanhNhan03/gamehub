@@ -120,3 +120,138 @@ describe('rooms and reconnect', () => {
     expect(store.rooms.has(code)).toBe(false);
   });
 });
+
+describe('Poker seat changes and new games', () => {
+  function pokerRoom() {
+    const code = store.create(a, 'poker');
+    store.join(b, code);
+    store.start(a.id, false);
+    return store.rooms.get(code)!;
+  }
+  it('lets only the host reset a live game, resetting stacks and its turn clock while preserving chat', () => {
+    const room = pokerRoom();
+    store.chat('b', 'Ván mới nhé');
+    expect(() => store.restartPoker('b')).toThrow('Chỉ chủ phòng');
+    vi.advanceTimersByTime(5000);
+    store.restartPoker('a');
+    expect(room.game?.gameId).toBe('poker');
+    if (room.game?.gameId !== 'poker') throw new Error('Expected Poker');
+    expect(room.game.handNumber).toBe(2);
+    expect(room.game.communityCards).toEqual([]);
+    expect(room.game.payouts).toEqual([]);
+    expect(room.game.pot).toBe(30);
+    expect(
+      room.game.players.reduce(
+        (total, player) => total + player.chips + player.contribution,
+        0,
+      ),
+    ).toBe(2000);
+    expect(room.deadline).toBe(35_000);
+    expect(room.chat[0]?.text).toBe('Ván mới nhé');
+    vi.advanceTimersByTime(25_000);
+    expect(room.game.street).toBe('preflop');
+  });
+  it('reserves a spectator seat during play and deals them in only on the next hand', () => {
+    const room = pokerRoom();
+    store.spectate(c, room.code);
+    store.takeSeat('c');
+    expect(
+      room.players.find((player) => player.id === 'c')?.waitingForNextHand,
+    ).toBe(true);
+    expect(room.spectators.some((player) => player.id === 'c')).toBe(false);
+    expect(room.game?.players.some((player) => player.id === 'c')).toBe(false);
+    expect(() => store.action('c', { type: 'all-in' })).toThrow(
+      'ván tiếp theo',
+    );
+    store.action('a', { type: 'fold' });
+    store.start('a', true);
+    if (room.game?.gameId !== 'poker') throw new Error('Expected Poker');
+    expect(
+      room.game.players.find((player) => player.id === 'c')?.holeCards,
+    ).toHaveLength(2);
+    expect(
+      room.players.find((player) => player.id === 'c')?.waitingForNextHand,
+    ).toBe(false);
+    const winner = room.game.players.find((player) => player.id === 'b')!;
+    expect(winner.chips + winner.contribution).toBe(1010);
+  });
+  it('allows any seated player to invite a spectator during a hand and includes waiting seats on restart', () => {
+    const room = pokerRoom();
+    store.spectate(c, room.code);
+    store.inviteSpectator('b', 'c');
+    store.answerSeatInvite('c', true);
+    expect(
+      room.players.find((player) => player.id === 'c')?.waitingForNextHand,
+    ).toBe(true);
+    store.restartPoker('a');
+    if (room.game?.gameId !== 'poker') throw new Error('Expected Poker');
+    expect(room.game.players).toHaveLength(3);
+    expect(
+      room.game.players.find((player) => player.id === 'c')?.holeCards,
+    ).toHaveLength(2);
+    expect(room.players.every((player) => !player.waitingForNextHand)).toBe(
+      true,
+    );
+  });
+  it('does not let competing spectators take the same last seat', () => {
+    const room = pokerRoom();
+    for (let index = 0; index < 5; index++) {
+      const player = { id: `seat${index}`, nickname: 'Đồng đội', avatar: 0 };
+      store.connect(player, player.id);
+      store.join(player, room.code);
+    }
+    const d = { id: 'd', nickname: 'Dũng', avatar: 3 };
+    store.connect(d, 'd1');
+    store.spectate(c, room.code);
+    store.spectate(d, room.code);
+    store.takeSeat('c');
+    expect(() => store.takeSeat('d')).toThrow('Ghế chơi');
+    expect(room.players).toHaveLength(8);
+    expect(room.spectators.map((player) => player.id)).toEqual(['d']);
+  });
+  it('removes departed players from room seats and the next hand while preserving surviving stacks', () => {
+    const code = store.create(a, 'poker');
+    store.join(b, code);
+    store.join(c, code);
+    store.start('a', false);
+    const room = store.rooms.get(code)!;
+    store.leave('b');
+    expect(room.players.map((player) => player.id)).toEqual(['a', 'c']);
+    if (room.game?.gameId !== 'poker') throw new Error('Expected Poker');
+    while (room.game.street !== 'between-hands')
+      store.action(room.game.turnId!, { type: 'fold' });
+    store.start('a', true);
+    expect(room.game.players.map((player) => player.id)).toEqual(['a', 'c']);
+    expect(
+      room.game.players.reduce(
+        (total, player) => total + player.chips + player.contribution,
+        room.game.deadPot,
+      ),
+    ).toBe(3000);
+  });
+  it('keeps live Caro seats closed and does not allow Poker restart on Caro', () => {
+    const room = table();
+    store.spectate(c, room.code);
+    expect(() => store.takeSeat('c')).toThrow('duyệt yêu cầu');
+    expect(() => store.restartPoker('a')).toThrow('dành cho Poker');
+    expect(() => store.inviteSpectator('a', 'c')).toThrow('ghế trống');
+  });
+  it('queues someone who leaves and returns under the same identity, without reviving their current hand', () => {
+    const code = store.create(a, 'poker');
+    store.join(b, code);
+    store.join(c, code);
+    store.start('a', false);
+    const room = store.rooms.get(code)!;
+    store.leave('b');
+    store.spectate(b, code);
+    store.takeSeat('b');
+    expect(() => store.action('b', { type: 'check' })).toThrow('ván tiếp theo');
+    if (room.game?.gameId !== 'poker') throw new Error('Expected Poker');
+    while (room.game.street !== 'between-hands')
+      store.action(room.game.turnId!, { type: 'fold' });
+    store.start('a', true);
+    const returned = room.game.players.find((player) => player.id === 'b')!;
+    expect(returned.holeCards).toHaveLength(2);
+    expect(returned.chips + returned.contribution).toBe(1000);
+  });
+});

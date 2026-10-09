@@ -6,6 +6,7 @@ export interface PlayerInfo {
 export interface RoomPlayer extends PlayerInfo {
   online: boolean;
   reconnectUntil: number | null;
+  waitingForNextHand?: boolean;
 }
 export interface RoomSpectator extends RoomPlayer {
   requestedSeat: boolean;
@@ -20,7 +21,7 @@ export interface ChatMessage {
 }
 export interface RoomSummary {
   code: string;
-  gameId: 'caro';
+  gameId: 'caro' | 'poker';
   hostName: string;
   count: number;
   maxPlayers: number;
@@ -59,18 +60,32 @@ export interface GameModule<State, Action, View> {
   onTimeout?(state: State): State;
   onPlayerAbsent?(state: State, playerId: string): State;
 }
+export type GameView =
+  | import('./games/caro/logic.js').CaroView
+  | import('./games/poker/types.js').PokerView;
+export type GameAction =
+  | import('./games/caro/logic.js').CaroAction
+  | import('./games/poker/types.js').PokerAction;
+export type GameState =
+  | import('./games/caro/logic.js').CaroState
+  | import('./games/poker/types.js').PokerState;
 export interface ServerEvents {
   'lobby:state': (state: LobbyState) => void;
   'room:state': (state: RoomView | null) => void;
-  'game:view': (view: import('./games/caro/logic.js').CaroView | null) => void;
+  'game:view': (view: GameView | null) => void;
   error: (error: { code: string; message: string }) => void;
   'server:restarting': (message: string) => void;
 }
 export interface ClientEvents {
-  'room:create': (payload: { gameId: 'caro'; maxPlayers: 2 }, ack: Ack) => void;
+  'room:create': (
+    payload:
+      { gameId: 'caro'; maxPlayers: 2 } | { gameId: 'poker'; maxPlayers: 8 },
+    ack: Ack,
+  ) => void;
   'room:join': (payload: { code: string }, ack: Ack) => void;
   'room:spectate': (payload: { code: string }, ack: Ack) => void;
   'room:seat-request': (payload: Record<string, never>, ack: Ack) => void;
+  'room:take-seat': (payload: Record<string, never>, ack: Ack) => void;
   'room:seat-request-response': (
     payload: { spectatorId: string; accept: boolean },
     ack: Ack,
@@ -81,9 +96,7 @@ export interface ClientEvents {
   'room:leave': (payload: Record<string, never>, ack: Ack) => void;
   'room:start': (payload: Record<string, never>, ack: Ack) => void;
   'room:rematch': (payload: Record<string, never>, ack: Ack) => void;
-  'game:action': (
-    payload: import('./games/caro/logic.js').CaroAction,
-    ack: Ack,
-  ) => void;
+  'room:restart': (payload: Record<string, never>, ack: Ack) => void;
+  'game:action': (payload: GameAction, ack: Ack) => void;
   'chat:send': (payload: { text: string }, ack: Ack) => void;
 }

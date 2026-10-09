@@ -86,7 +86,7 @@ function client(
     entry.room = room;
   });
   socket.on('game:view', (game) => {
-    entry.game = game;
+    entry.game = game?.gameId === 'caro' ? game : null;
   });
   clients.push(entry);
   return entry;

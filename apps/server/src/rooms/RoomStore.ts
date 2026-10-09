@@ -4,15 +4,22 @@ import {
   TURN_MS,
   RECONNECT_MS,
   EMPTY_ROOM_MS,
-  type CaroState,
+  POKER_PLAYERS_MAX,
+  POKER_TURN_MS,
+  type GameState,
+  type GameAction,
   type PlayerInfo,
   type RoomPlayer,
   type RoomSpectator,
   type RoomView,
   type RoomSummary,
   type ChatMessage,
-  type CaroAction,
 } from '@gamehub/shared';
+import {
+  createPokerDeck,
+  poker,
+  startNextPokerHand,
+} from '@gamehub/shared/poker';
 
 export class RoomError extends Error {
   constructor(
@@ -22,13 +29,23 @@ export class RoomError extends Error {
     super(message);
   }
 }
+function shuffledPokerDeck() {
+  const deck = createPokerDeck();
+  for (let index = deck.length - 1; index > 0; index--) {
+    const other = randomInt(index + 1);
+    [deck[index], deck[other]] = [deck[other]!, deck[index]!];
+  }
+  return deck;
+}
 export interface Room {
   code: string;
+  gameId: 'caro' | 'poker';
+  maxPlayers: number;
   hostId: string | null;
   players: RoomPlayer[];
   spectators: RoomSpectator[];
   chat: ChatMessage[];
-  game: CaroState | null;
+  game: GameState | null;
   deadline: number | null;
   remaining: number;
   emptySince: number | null;
@@ -98,12 +115,20 @@ export class RoomStore {
     }
     if (room && seat) {
       Object.assign(seat, player, { online: true, reconnectUntil: null });
-      if (room.game)
+      if (room.game?.gameId === 'caro')
         room.game = {
           ...room.game,
           players: room.game.players.map((p) =>
             p.id === player.id ? { ...player } : p,
           ),
+        };
+      else if (room.game?.gameId === 'poker')
+        room.game = {
+          ...room.game,
+          players: room.game.players.map((p) =>
+            p.id === player.id ? { ...p, ...player } : p,
+          ),
+          missedHands: { ...room.game.missedHands, [player.id]: 0 },
         };
       this.clearAbsent(player.id);
       if (
@@ -151,7 +176,11 @@ export class RoomStore {
     this.checkDeadline(room);
     player.online = false;
     player.reconnectUntil = Date.now() + RECONNECT_MS;
-    if (room.game?.status === 'playing' && room.deadline !== null) {
+    if (
+      room.game?.gameId === 'caro' &&
+      room.game.status === 'playing' &&
+      room.deadline !== null
+    ) {
       room.remaining = Math.max(0, room.deadline - Date.now());
       this.stopClock(room);
     }
@@ -170,7 +199,7 @@ export class RoomStore {
     this.absentTimers.set(playerId, timer);
     this.publish(room);
   }
-  create(player: PlayerInfo) {
+  create(player: PlayerInfo, gameId: Room['gameId'] = 'caro') {
     if (this.membership.has(player.id))
       throw new RoomError(
         'ALREADY_IN_ROOM',
@@ -186,6 +215,8 @@ export class RoomStore {
     } while (this.rooms.has(code));
     const room: Room = {
       code,
+      gameId,
+      maxPlayers: gameId === 'poker' ? POKER_PLAYERS_MAX : 2,
       hostId: player.id,
       players: [{ ...player, online: true, reconnectUntil: null }],
       chat: [],
@@ -223,17 +254,24 @@ export class RoomStore {
         'ALREADY_IN_ROOM',
         'Rời phòng hiện tại trước khi vào phòng khác nhé.',
       );
-    if (room.players.length >= 2)
+    if (room.players.length >= room.maxPlayers)
       throw new RoomError(
         'ROOM_FULL',
-        'Phòng đủ hai người rồi. Rủ thêm một kèo mới nhé!',
+        room.gameId === 'caro'
+          ? 'Phòng đủ hai người rồi. Rủ thêm một kèo mới nhé!'
+          : 'Phòng Poker đã đủ tám người rồi.',
       );
-    if (room.game?.status === 'playing')
+    if (room.game?.status === 'playing' && room.gameId !== 'poker')
       throw new RoomError(
         'GAME_IN_PROGRESS',
         'Phòng đang chơi, chờ ván sau nhé.',
       );
-    room.players.push({ ...player, online: true, reconnectUntil: null });
+    room.players.push({
+      ...player,
+      online: true,
+      reconnectUntil: null,
+      waitingForNextHand: room.gameId === 'poker' && !!room.game,
+    });
     room.hostId ??= player.id;
     room.emptySince = null;
     this.membership.set(player.id, code);
@@ -279,6 +317,18 @@ export class RoomStore {
     viewer.requestedSeat = !viewer.requestedSeat;
     this.publish(room);
   }
+  takeSeat(playerId: string) {
+    const room = this.forPlayer(playerId);
+    if (room.gameId !== 'poker')
+      throw new RoomError(
+        'POKER_ONLY',
+        'Bàn này cần người chơi duyệt yêu cầu.',
+      );
+    const viewer = room.spectators.find((item) => item.id === playerId);
+    if (!viewer)
+      throw new RoomError('SPECTATOR_ONLY', 'Bạn đã có ghế chơi rồi.');
+    this.promoteSpectator(room, viewer);
+  }
   inviteSpectator(playerId: string, spectatorId: string) {
     const room = this.forPlayer(playerId);
     if (!room.players.some((player) => player.id === playerId))
@@ -286,7 +336,10 @@ export class RoomStore {
         'PLAYER_ONLY',
         'Người chơi trong phòng mới gửi lời mời được.',
       );
-    if (room.players.length >= 2 || room.game?.status === 'playing')
+    if (
+      room.players.length >= room.maxPlayers ||
+      (room.game?.status === 'playing' && room.gameId !== 'poker')
+    )
       throw new RoomError(
         'SEAT_UNAVAILABLE',
         'Phòng chưa có ghế trống để mời vào chơi.',
@@ -346,51 +399,160 @@ export class RoomStore {
     }
     this.removePlayer(room, playerId);
   }
+  restartPoker(playerId: string) {
+    const room = this.forPlayer(playerId);
+    if (room.hostId !== playerId)
+      throw new RoomError('HOST_ONLY', 'Chỉ chủ phòng mới mở game mới được.');
+    if (room.gameId !== 'poker')
+      throw new RoomError('POKER_ONLY', 'Chức năng này dành cho Poker.');
+    if (
+      room.players.length < 2 ||
+      room.players.some((player) => !player.online)
+    )
+      throw new RoomError(
+        'NEED_PLAYERS',
+        'Cần ít nhất hai người đang online để mở game mới.',
+      );
+    const handNumber =
+      (room.game?.gameId === 'poker' ? room.game.handNumber : 0) + 1;
+    room.game = {
+      ...poker.init(room.players, { deck: shuffledPokerDeck() }),
+      handNumber,
+    };
+    for (const seat of room.players) seat.waitingForNextHand = false;
+    this.startClock(room, POKER_TURN_MS);
+    this.publish(room);
+  }
   start(playerId: string, rematch: boolean) {
     const room = this.forPlayer(playerId);
     if (room.hostId !== playerId)
       throw new RoomError('HOST_ONLY', 'Chủ phòng mới bắt đầu được nhé.');
-    if (room.players.length !== 2 || room.players.some((p) => !p.online))
-      throw new RoomError(
-        'NEED_PLAYERS',
-        'Cần đủ hai đồng nghiệp đang online để bắt đầu.',
-      );
-    if (room.game?.status === 'playing')
-      throw new RoomError('GAME_IN_PROGRESS', 'Ván đang chơi rồi.');
-    if (rematch && room.game?.status !== 'finished')
-      throw new RoomError(
-        'NOT_FINISHED',
-        'Chơi xong ván này rồi chơi lại nhé.',
-      );
-    if (!rematch && room.game)
-      throw new RoomError('USE_REMATCH', 'Bấm Chơi lại để mở ván mới nhé.');
     const players = room.players.map(({ id, nickname, avatar }) => ({
       id,
       nickname,
       avatar,
     }));
-    // Alternate who holds X on rematch, without changing the host.
-    if (rematch && room.game?.players[0]?.id === players[0]?.id)
-      players.reverse();
-    room.game = caro.init(players);
-    this.startClock(room, TURN_MS);
+    if (room.gameId === 'caro') {
+      if (players.length !== 2 || room.players.some((p) => !p.online))
+        throw new RoomError(
+          'NEED_PLAYERS',
+          'Cần đủ hai đồng nghiệp đang online để bắt đầu.',
+        );
+      if (room.game?.status === 'playing')
+        throw new RoomError('GAME_IN_PROGRESS', 'Ván đang chơi rồi.');
+      if (rematch && room.game?.status !== 'finished')
+        throw new RoomError(
+          'NOT_FINISHED',
+          'Chơi xong ván này rồi chơi lại nhé.',
+        );
+      if (!rematch && room.game)
+        throw new RoomError('USE_REMATCH', 'Bấm Chơi lại để mở ván mới nhé.');
+      // Alternate who holds X on rematch, without changing the host.
+      if (rematch && room.game?.players[0]?.id === players[0]?.id)
+        players.reverse();
+      room.game = caro.init(players);
+      this.startClock(room, TURN_MS);
+    } else if (!room.game) {
+      if (players.length < 2 || room.players.some((p) => !p.online))
+        throw new RoomError(
+          'NEED_PLAYERS',
+          'Cần ít nhất hai đồng nghiệp đang online để bắt đầu.',
+        );
+      if (rematch)
+        throw new RoomError('NOT_FINISHED', 'Chưa có ván nào để chơi lại.');
+      room.game = poker.init(players, { deck: shuffledPokerDeck() });
+      this.startClock(room, POKER_TURN_MS);
+    } else if (rematch && room.game.status === 'finished') {
+      if (players.length < 2 || room.players.some((p) => !p.online))
+        throw new RoomError(
+          'NEED_PLAYERS',
+          'Cần ít nhất hai đồng nghiệp đang online để mở giải mới.',
+        );
+      this.restartPoker(playerId);
+      return;
+    } else if (
+      rematch &&
+      room.game.gameId === 'poker' &&
+      room.game.status === 'playing' &&
+      room.game.street === 'between-hands'
+    ) {
+      const seated = new Set(room.players.map((player) => player.id));
+      const missingIds = room.game.players
+        .filter(
+          (player) =>
+            !seated.has(player.id) ||
+            !room.players.find((seat) => seat.id === player.id)?.online,
+        )
+        .map((player) => player.id);
+      const result = startNextPokerHand(
+        room.game,
+        shuffledPokerDeck(),
+        missingIds,
+        players,
+        room.players
+          .filter((player) => player.waitingForNextHand)
+          .map((player) => player.id),
+      );
+      if (result.error) throw new RoomError('NEED_PLAYERS', result.error);
+      room.game = result.state;
+      if (
+        room.game.status === 'playing' &&
+        room.game.street !== 'between-hands'
+      )
+        this.startClock(room, POKER_TURN_MS);
+      else this.stopClock(room);
+    } else {
+      throw new RoomError(
+        room.game.status === 'playing' ? 'GAME_IN_PROGRESS' : 'NOT_FINISHED',
+        room.game.status === 'playing'
+          ? 'Ván đang chơi rồi.'
+          : 'Bấm Chơi lại để mở giải mới nhé.',
+      );
+    }
+    if (room.gameId === 'poker')
+      for (const seat of room.players) seat.waitingForNextHand = false;
     this.publish(room);
   }
-  action(playerId: string, action: CaroAction) {
+  action(playerId: string, action: GameAction) {
     const room = this.forPlayer(playerId);
     this.checkDeadline(room);
+    if (!room.players.some((player) => player.id === playerId))
+      throw new RoomError('PLAYER_ONLY', 'Spectator không thể đánh bài.');
+    if (
+      room.players.find((player) => player.id === playerId)?.waitingForNextHand
+    )
+      throw new RoomError(
+        'WAITING_NEXT_HAND',
+        'Bạn sẽ được chia bài từ ván tiếp theo.',
+      );
     if (!room.game || room.game.status !== 'playing')
       throw new RoomError('NO_ACTIVE_GAME', 'Chưa có ván đang chơi.');
-    if (room.players.some((p) => !p.online))
+    if (room.game.gameId === 'caro' && room.players.some((p) => !p.online))
       throw new RoomError(
         'WAITING_RECONNECT',
         'Chờ đồng nghiệp kết nối lại một chút nhé.',
       );
-    const result = caro.applyAction(room.game, playerId, action);
+    const result =
+      room.game.gameId === 'caro'
+        ? action.type === 'place'
+          ? caro.applyAction(room.game, playerId, action)
+          : { state: room.game, error: 'Nước đi Cờ caro không hợp lệ.' }
+        : action.type === 'place'
+          ? { state: room.game, error: 'Hành động Poker không hợp lệ.' }
+          : poker.applyAction(room.game, playerId, action);
     if (result.error) throw new RoomError('INVALID_MOVE', result.error);
     room.game = result.state;
-    if (caro.isFinished(room.game)) this.stopClock(room);
-    else this.startClock(room, TURN_MS);
+    if (
+      room.game.gameId === 'caro'
+        ? caro.isFinished(room.game)
+        : poker.isFinished(room.game) || room.game.street === 'between-hands'
+    )
+      this.stopClock(room);
+    else
+      this.startClock(
+        room,
+        room.game.gameId === 'caro' ? TURN_MS : POKER_TURN_MS,
+      );
     this.publish(room);
   }
   chat(playerId: string, text: string) {
@@ -420,10 +582,10 @@ export class RoomStore {
   summary(room: Room): RoomSummary {
     return {
       code: room.code,
-      gameId: 'caro',
+      gameId: room.gameId,
       hostName: room.players.find((p) => p.id === room.hostId)?.nickname ?? '',
       count: room.players.length,
-      maxPlayers: 2,
+      maxPlayers: room.maxPlayers,
       spectatorCount: room.spectators.filter((viewer) => viewer.online).length,
       status: room.game?.status ?? 'waiting',
     };
@@ -471,16 +633,38 @@ export class RoomStore {
       room.deadline !== null &&
       Date.now() >= room.deadline
     ) {
-      room.game = caro.onTimeout!(room.game);
-      this.stopClock(room);
+      room.game =
+        room.game.gameId === 'caro'
+          ? caro.onTimeout!(room.game)
+          : poker.onTimeout!(room.game);
+      if (
+        room.game.status === 'finished' ||
+        (room.game.gameId === 'poker' && room.game.street === 'between-hands')
+      )
+        this.stopClock(room);
+      else
+        this.startClock(
+          room,
+          room.game.gameId === 'caro' ? TURN_MS : POKER_TURN_MS,
+        );
       this.publish(room);
     }
   }
   private removePlayer(room: Room, playerId: string) {
     this.clearAbsent(playerId);
     if (room.game?.status === 'playing') {
-      room.game = caro.onPlayerAbsent!(room.game, playerId);
-      this.stopClock(room);
+      room.game =
+        room.game.gameId === 'caro'
+          ? caro.onPlayerAbsent!(room.game, playerId)
+          : poker.onPlayerAbsent!(room.game, playerId);
+      if (
+        room.game.status === 'finished' ||
+        (room.game.gameId === 'poker' && room.game.street === 'between-hands')
+      )
+        this.stopClock(room);
+      else if (room.game.gameId === 'poker')
+        this.startClock(room, POKER_TURN_MS);
+      else this.stopClock(room);
     }
     room.players = room.players.filter((p) => p.id !== playerId);
     this.membership.delete(playerId);
@@ -504,7 +688,10 @@ export class RoomStore {
     this.publish(room);
   }
   private promoteSpectator(room: Room, viewer: RoomSpectator) {
-    if (room.players.length >= 2 || room.game?.status === 'playing')
+    if (
+      room.players.length >= room.maxPlayers ||
+      (room.game?.status === 'playing' && room.gameId !== 'poker')
+    )
       throw new RoomError(
         'SEAT_UNAVAILABLE',
         'Ghế chơi sẽ mở sau khi ván này kết thúc.',
@@ -521,6 +708,7 @@ export class RoomStore {
       avatar: viewer.avatar,
       online: true,
       reconnectUntil: null,
+      waitingForNextHand: room.gameId === 'poker' && !!room.game,
     });
     room.hostId ??= viewer.id;
     room.emptySince = null;

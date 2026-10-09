@@ -11,6 +11,7 @@ import {
   type PlayerInfo,
   type Ack,
 } from '@gamehub/shared';
+import { poker } from '@gamehub/shared/poker';
 import { authenticate } from './socket/auth.js';
 import { RoomStore, RoomError, type Room } from './rooms/RoomStore.js';
 import {
@@ -59,7 +60,7 @@ let closing = false;
 app.get('/health', (_req, res) =>
   res
     .status(closing ? 503 : 200)
-    .json({ status: closing ? 'restarting' : 'ok', phase: 1 }),
+    .json({ status: closing ? 'restarting' : 'ok', phase: 4 }),
 );
 const webRoot = fileURLToPath(new URL('../../web/dist/', import.meta.url));
 app.use(express.static(webRoot));
@@ -76,7 +77,9 @@ function publishRoom(room: Room) {
   for (const player of [...room.players, ...room.spectators]) {
     const view = room.game
       ? {
-          ...caro.getViewFor(room.game, player.id),
+          ...(room.game.gameId === 'caro'
+            ? caro.getViewFor(room.game, player.id)
+            : poker.getViewFor(room.game, player.id)),
           roomCode: room.code,
           deadline: room.deadline,
           serverTime: Date.now(),
@@ -189,7 +192,9 @@ io.on('connection', (socket) => {
   const player = socket.data.player;
   rooms.connect(player, socket.id);
   socket.on('room:create', (payload, ack) =>
-    handle(socket, createSchema, payload, ack, () => rooms.create(player)),
+    handle(socket, createSchema, payload, ack, (data) =>
+      rooms.create(player, data.gameId),
+    ),
   );
   socket.on('room:join', (payload, ack) =>
     handle(socket, codeSchema, payload, ack, (data) =>
@@ -205,6 +210,9 @@ io.on('connection', (socket) => {
     handle(socket, emptySchema, payload, ack, () =>
       rooms.requestSeat(player.id),
     ),
+  );
+  socket.on('room:take-seat', (payload, ack) =>
+    handle(socket, emptySchema, payload, ack, () => rooms.takeSeat(player.id)),
   );
   socket.on('room:seat-request-response', (payload, ack) =>
     handle(socket, seatRequestResponseSchema, payload, ack, (data) =>
@@ -237,6 +245,11 @@ io.on('connection', (socket) => {
   socket.on('room:rematch', (payload, ack) =>
     handle(socket, emptySchema, payload, ack, () =>
       rooms.start(player.id, true),
+    ),
+  );
+  socket.on('room:restart', (payload, ack) =>
+    handle(socket, emptySchema, payload, ack, () =>
+      rooms.restartPoker(player.id),
     ),
   );
   socket.on('game:action', (payload, ack) =>

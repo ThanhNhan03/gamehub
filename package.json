@@ -17,7 +17,8 @@
     "test": "vitest run",
     "test:smoke": "tsx scripts/smoke.ts",
     "test:phase1": "pnpm build && tsx scripts/phase1.ts",
-    "test:phase1:long": "pnpm build && tsx scripts/phase1.ts --long"
+    "test:phase1:long": "pnpm build && tsx scripts/phase1.ts --long",
+    "test:phase4": "pnpm build && tsx scripts/phase4.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

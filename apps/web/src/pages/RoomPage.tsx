@@ -8,6 +8,9 @@ import { Avatar, GameArt, Icon } from '../components/Art';
 import { Button, Dialog } from '../components/UI';
 import { ChatPanel } from '../components/ChatPanel';
 import { CaroBoard } from '../games/caro/CaroBoard';
+import { PokerTable } from '../games/poker/PokerTable';
+import { createPlayerLabels } from '../lib/playerNames';
+import { PlayerName } from '../components/PlayerName';
 
 export function RoomPage({ notify }: { notify: (text: string) => void }) {
   const { code: rawCode = '' } = useParams();
@@ -19,6 +22,7 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
   const [seatBusy, setSeatBusy] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [restartOpen, setRestartOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const attempted = useRef('');
   const offset = useMemo(
@@ -81,6 +85,20 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
     setSeatBusy(false);
     if (!result.ok) notify(result.error.message);
   }
+  async function takeSeat() {
+    setSeatBusy(true);
+    const result = await request('room:take-seat', {});
+    setSeatBusy(false);
+    if (!result.ok) notify(result.error.message);
+    else notify('Bạn đã nhận ghế. Bài sẽ được chia từ ván tiếp theo!');
+  }
+  async function restart() {
+    setPending(true);
+    const result = await request('room:restart', {});
+    setPending(false);
+    if (!result.ok) notify(result.error.message);
+    else setRestartOpen(false);
+  }
   async function answerInvite(accept: boolean) {
     setSeatBusy(true);
     const result = await request('room:seat-invite-response', { accept });
@@ -114,6 +132,10 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
       </div>
     );
   const activeGame = game?.roomCode === code ? game : null;
+  const { codeFor, nameFor } = createPlayerLabels(room);
+  const activeCaro = activeGame?.gameId === 'caro' ? activeGame : null;
+  const activePoker = activeGame?.gameId === 'poker' ? activeGame : null;
+  const gameName = room.gameId === 'poker' ? 'Poker' : 'Cờ caro';
   const isHost = room.hostId === session.playerId;
   const isPlayer = room.players.some(
     (player) => player.id === session.playerId,
@@ -124,13 +146,34 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
   const ownSpectator = room.spectators.find(
     (viewer) => viewer.id === session.playerId,
   );
-  const inviterName = room.players.find(
+  const inviter = room.players.find(
     (player) => player.id === ownSpectator?.invitedBy,
-  )?.nickname;
+  );
+  const inviterName = inviter
+    ? nameFor(inviter.id, inviter.nickname)
+    : undefined;
   const absent = room.players.filter((p) => !p.online);
-  const canOfferSeat = room.players.length < 2 && room.status !== 'playing';
+  const canOfferSeat =
+    room.players.length < room.maxPlayers &&
+    (room.gameId === 'poker' || room.status !== 'playing');
+  const canRestart =
+    connected && room.players.length >= 2 && absent.length === 0;
   const canStart =
-    room.players.length === 2 && absent.length === 0 && connected;
+    connected &&
+    (activePoker?.status === 'playing' && activePoker.street === 'between-hands'
+      ? isHost &&
+        room.players.filter((seat) => {
+          const player = activePoker.players.find(
+            (player) => player.id === seat.id,
+          );
+          return (
+            seat.online &&
+            (seat.waitingForNextHand ||
+              !player ||
+              (player.chips > 0 && !player.eliminated))
+          );
+        }).length >= 2
+      : room.players.length >= 2 && absent.length === 0);
   const seconds = Math.min(
     TURN_MS / 1000,
     Math.max(
@@ -142,7 +185,7 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
     connected &&
     activeGame?.status === 'playing' &&
     activeGame.turnId === session.playerId &&
-    absent.length === 0;
+    (room.gameId === 'poker' || absent.length === 0);
   const chat = <ChatPanel room={room} notify={notify} />;
   return (
     <div className="room-page">
@@ -152,9 +195,11 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
             <Icon name="pad" size={28} />
           </span>
           <div>
-            <span className="eyebrow">HỘI MÌNH CHƠI CARO</span>
+            <span className="eyebrow">
+              HỘI MÌNH CHƠI {gameName.toUpperCase()}
+            </span>
             <h1>
-              Cờ caro <span className="room-code-badge">{room.code}</span>
+              {gameName} <span className="room-code-badge">{room.code}</span>
             </h1>
             {isSpectator && (
               <span className="label-pill spectator-role">ĐANG XEM</span>
@@ -162,6 +207,15 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
           </div>
         </div>
         <div className="room-actions">
+          {isHost && activePoker && (
+            <Button
+              color="orange"
+              disabled={!canRestart || pending}
+              onClick={() => setRestartOpen(true)}
+            >
+              Game mới
+            </Button>
+          )}
           <Button
             color="green"
             onClick={async () => {
@@ -203,7 +257,13 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
           {absent.map((p) => (
             <span key={p.id}>
               <i className="offline-dot" /> Đang chờ{' '}
-              <strong>{p.nickname}</strong> kết nối lại · giữ chỗ{' '}
+              <strong>
+                <PlayerName
+                  nickname={p.nickname}
+                  code={codeFor(p.id, p.nickname)}
+                />
+              </strong>{' '}
+              kết nối lại · giữ chỗ{' '}
               {Math.min(
                 RECONNECT_MS / 1000,
                 Math.max(
@@ -217,13 +277,26 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
               s
             </span>
           ))}
-          {room.status === 'playing' && (
+          {room.status === 'playing' && room.gameId === 'caro' && (
             <small>Ván và đồng hồ đang tạm dừng.</small>
           )}
         </div>
       )}
       {isSpectator && (
         <section className="spectator-seat-panel panel">
+          {room.gameId === 'poker' && (
+            <Button
+              color="green"
+              disabled={seatBusy || !connected || !canOfferSeat}
+              onClick={() => void takeSeat()}
+            >
+              {canOfferSeat
+                ? activePoker
+                  ? 'Nhận ghế · chờ ván sau'
+                  : 'Vào bàn chơi'
+                : 'Bàn đã đủ người'}
+            </Button>
+          )}
           {ownSpectator?.invitedBy ? (
             <>
               <p>
@@ -271,85 +344,92 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
       )}
       <div className="room-layout">
         <div className="room-play-area">
-          <div className="player-panels">
-            {(activeGame?.players ?? room.players).map((player, index) => {
-              const seat = room.players.find((p) => p.id === player.id);
-              const turn =
-                activeGame?.status === 'playing' &&
-                activeGame.turnId === player.id;
-              return (
-                <div
-                  key={player.id}
-                  className={`player-panel panel ${turn ? 'active-player' : ''}`}
-                >
-                  <Avatar variant={player.avatar} size={52} />
-                  <div className="player-info">
-                    <strong>
-                      {player.nickname}
-                      {player.id === session.playerId ? ' · Bạn' : ''}
-                    </strong>
-                    <small>
-                      <i
-                        className={seat?.online ? 'online-dot' : 'offline-dot'}
-                      />
-                      {seat?.online ? 'Đang online' : 'Đã rời / mất kết nối'}
-                      {room.hostId === player.id ? ' · Chủ phòng' : ''}
-                    </small>
-                    {turn && (
-                      <span className="turn-label">
-                        {absent.length ? 'Đang chờ kết nối' : 'Đến lượt'}
+          {(!activeGame || activeCaro) && (
+            <div className="player-panels">
+              {(activeCaro?.players ?? room.players).map((player, index) => {
+                const seat = room.players.find((p) => p.id === player.id);
+                const turn =
+                  activeCaro?.status === 'playing' &&
+                  activeCaro.turnId === player.id;
+                return (
+                  <div
+                    key={player.id}
+                    className={`player-panel panel ${turn ? 'active-player' : ''}`}
+                  >
+                    <Avatar variant={player.avatar} size={52} />
+                    <div className="player-info">
+                      <strong>
+                        <PlayerName
+                          nickname={player.nickname}
+                          code={codeFor(player.id, player.nickname)}
+                        />
+                        {player.id === session.playerId ? ' · Bạn' : ''}
+                      </strong>
+                      <small>
+                        <i
+                          className={
+                            seat?.online ? 'online-dot' : 'offline-dot'
+                          }
+                        />
+                        {seat?.online ? 'Đang online' : 'Đã rời / mất kết nối'}
+                        {room.hostId === player.id ? ' · Chủ phòng' : ''}
+                      </small>
+                      {turn && (
+                        <span className="turn-label">
+                          {absent.length ? 'Đang chờ kết nối' : 'Đến lượt'}
+                        </span>
+                      )}
+                    </div>
+                    {activeCaro && (
+                      <span
+                        className={`player-mark mark-${index === 0 ? 'X' : 'O'}`}
+                      >
+                        {index === 0 ? 'X' : 'O'}
                       </span>
                     )}
+                    {turn && absent.length === 0 && (
+                      <div
+                        className="turn-countdown"
+                        role="timer"
+                        aria-label={`Còn ${seconds} giây`}
+                      >
+                        <svg viewBox="0 0 48 48" aria-hidden="true">
+                          <circle
+                            cx="24"
+                            cy="24"
+                            r="20"
+                            fill="#FFF4CC"
+                            stroke="#2A1B4A"
+                            strokeWidth="3"
+                          />
+                          <circle
+                            cx="24"
+                            cy="24"
+                            r="20"
+                            fill="none"
+                            stroke="#FF4F8B"
+                            strokeWidth="4"
+                            strokeDasharray={`${Math.max(0, seconds / (TURN_MS / 1000)) * 126} 126`}
+                            transform="rotate(-90 24 24)"
+                          />
+                        </svg>
+                        <strong>{seconds}</strong>
+                      </div>
+                    )}
                   </div>
-                  {activeGame && (
-                    <span
-                      className={`player-mark mark-${index === 0 ? 'X' : 'O'}`}
-                    >
-                      {index === 0 ? 'X' : 'O'}
-                    </span>
-                  )}
-                  {turn && absent.length === 0 && (
-                    <div
-                      className="turn-countdown"
-                      role="timer"
-                      aria-label={`Còn ${seconds} giây`}
-                    >
-                      <svg viewBox="0 0 48 48" aria-hidden="true">
-                        <circle
-                          cx="24"
-                          cy="24"
-                          r="20"
-                          fill="#FFF4CC"
-                          stroke="#2A1B4A"
-                          strokeWidth="3"
-                        />
-                        <circle
-                          cx="24"
-                          cy="24"
-                          r="20"
-                          fill="none"
-                          stroke="#FF4F8B"
-                          strokeWidth="4"
-                          strokeDasharray={`${Math.max(0, seconds / (TURN_MS / 1000)) * 126} 126`}
-                          transform="rotate(-90 24 24)"
-                        />
-                      </svg>
-                      <strong>{seconds}</strong>
-                    </div>
-                  )}
+                );
+              })}
+              {!activeGame && room.players.length < room.maxPlayers && (
+                <div className="player-panel panel empty-seat">
+                  <Icon name="plus" size={36} />
+                  <div>
+                    <strong>Ghế này dành cho đồng đội</strong>
+                    <small>Gửi mã {code}, rủ một người vào nhé.</small>
+                  </div>
                 </div>
-              );
-            })}
-            {!activeGame && room.players.length < 2 && (
-              <div className="player-panel panel empty-seat">
-                <Icon name="plus" size={36} />
-                <div>
-                  <strong>Ghế này dành cho đồng đội</strong>
-                  <small>Gửi mã {code}, rủ một người vào nhé.</small>
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
           {room.spectators.length > 0 && (
             <div
               className="spectator-strip panel"
@@ -362,7 +442,10 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
                   <span key={viewer.id} className="spectator-person">
                     <Avatar variant={viewer.avatar} size={30} />
                     <span>
-                      {viewer.nickname}
+                      <PlayerName
+                        nickname={viewer.nickname}
+                        code={codeFor(viewer.id, viewer.nickname)}
+                      />
                       {viewer.id === session.playerId ? ' · Bạn' : ''}
                     </span>
                     <i
@@ -371,16 +454,19 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
                     {viewer.invitedBy && (
                       <small>
                         Được mời bởi{' '}
-                        {room.players.find(
-                          (player) => player.id === viewer.invitedBy,
-                        )?.nickname ?? 'đồng đội'}
+                        {nameFor(
+                          viewer.invitedBy,
+                          room.players.find(
+                            (player) => player.id === viewer.invitedBy,
+                          )?.nickname ?? 'đồng đội',
+                        )}
                       </small>
                     )}
                     {isPlayer && canOfferSeat && viewer.online && (
                       <Button
                         color="cream"
                         className="spectator-invite-button"
-                        aria-label={`Mời ${viewer.nickname} vào chơi`}
+                        aria-label={`Mời ${nameFor(viewer.id, viewer.nickname)} vào chơi`}
                         disabled={seatBusy || !connected || !!viewer.invitedBy}
                         onClick={() => void inviteViewer(viewer.id)}
                       >
@@ -404,7 +490,12 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
                   .map((viewer) => (
                     <div className="seat-request-row" key={viewer.id}>
                       <Avatar variant={viewer.avatar} size={38} />
-                      <strong>{viewer.nickname}</strong>
+                      <strong>
+                        <PlayerName
+                          nickname={viewer.nickname}
+                          code={codeFor(viewer.id, viewer.nickname)}
+                        />
+                      </strong>
                       <Button
                         color="green"
                         disabled={
@@ -433,13 +524,29 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
             )}
           {!activeGame ? (
             <section className="waiting-room panel">
-              <GameArt game="caro" />
-              <span className="label-pill">{room.players.length}/2 NGƯỜI</span>
+              <GameArt game={room.gameId} />
+              <span className="label-pill">
+                {room.players.length}/{room.maxPlayers} NGƯỜI
+              </span>
               <h2>Chờ đồng nghiệp tí nhé...</h2>
-              <p>Hai người, một bàn cờ. Nối 5 quân liền nhau là thắng!</p>
+              <p>
+                {room.gameId === 'poker'
+                  ? 'Texas Hold’em · 1.000 chip mỗi người · blind 10/20.'
+                  : 'Hai người, một bàn cờ. Nối 5 quân liền nhau là thắng!'}
+              </p>
               <div className="waiting-rules">
-                <span>15 × 15 ô</span>
-                <span>30 giây / nước</span>
+                {room.gameId === 'poker' ? (
+                  <>
+                    <span>2–8 người</span>
+                    <span>30 giây / lượt</span>
+                    <span>Chip ảo, không quy đổi tiền</span>
+                  </>
+                ) : (
+                  <>
+                    <span>15 × 15 ô</span>
+                    <span>30 giây / nước</span>
+                  </>
+                )}
                 <span>Người thật với người thật</span>
               </div>
               {isHost ? (
@@ -455,7 +562,7 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
                   <p className="helper">
                     {canStart
                       ? 'Đủ đội rồi. Chủ phòng bấm bắt đầu nhé!'
-                      : 'Cần đủ 2 người đang online để bắt đầu.'}
+                      : `Cần ít nhất 2 người đang online để bắt đầu ${room.gameId === 'poker' ? 'bàn Poker' : 'ván cờ'}.`}
                   </p>
                 </>
               ) : (
@@ -464,9 +571,21 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
                 </div>
               )}
             </section>
-          ) : (
+          ) : activePoker ? (
+            <PokerTable
+              game={activePoker}
+              room={room}
+              playerId={session.playerId}
+              connected={connected}
+              isHost={isHost}
+              canStart={canStart}
+              onStart={() => void begin(true)}
+              onLeave={() => void leave()}
+              notify={notify}
+            />
+          ) : activeCaro ? (
             <>
-              {activeGame.status === 'finished' ? (
+              {activeCaro.status === 'finished' ? (
                 <section className="result-banner panel" aria-live="polite">
                   <div className="result-badge">
                     <Icon name="spark" size={40} />
@@ -474,16 +593,16 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
                   <div>
                     <span className="eyebrow">HẾT VÁN, VUI TIẾP!</span>
                     <h2>
-                      {activeGame.winnerId
-                        ? `${activeGame.players.find((p) => p.id === activeGame.winnerId)?.nickname} thắng rồi!`
+                      {activeCaro.winnerId
+                        ? `${nameFor(activeCaro.winnerId, activeCaro.players.find((p) => p.id === activeCaro.winnerId)?.nickname ?? 'Đồng đội')} thắng rồi!`
                         : 'Hòa rồi! Hai cao thủ ngang tài.'}
                     </h2>
                     <p>
-                      {activeGame.reason === 'five'
+                      {activeCaro.reason === 'five'
                         ? 'Năm quân liền nhau. Một nước đi quá đẹp!'
-                        : activeGame.reason === 'timeout'
+                        : activeCaro.reason === 'timeout'
                           ? 'Đối thủ hết 30 giây cho nước đi.'
-                          : activeGame.reason === 'absent'
+                          : activeCaro.reason === 'absent'
                             ? 'Đối thủ đã rời phòng hoặc quá 60 giây chưa kết nối lại.'
                             : 'Bàn đã đầy. Làm thêm ván nữa nhé?'}
                     </p>
@@ -513,7 +632,7 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
                       Mời đủ hai người online để chơi lại nhé.
                     </p>
                   )}
-                  {activeGame.winnerId && (
+                  {activeCaro.winnerId && (
                     <div className="confetti-burst" aria-hidden="true">
                       {Array.from({ length: 18 }, (_, i) => (
                         <i
@@ -541,11 +660,11 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
                     ? 'Tạm dừng để chờ đồng đội.'
                     : canPlay
                       ? 'Đến lượt bạn! Chọn một ô trống nhé.'
-                      : `Chờ ${activeGame.players.find((p) => p.id === activeGame.turnId)?.nickname} đi một nước...`}
+                      : `Chờ ${nameFor(activeCaro.turnId ?? '', activeCaro.players.find((p) => p.id === activeCaro.turnId)?.nickname ?? 'đồng đội')} đi một nước...`}
                 </div>
               )}
               <CaroBoard
-                game={activeGame}
+                game={activeCaro}
                 canPlay={canPlay}
                 pending={pending}
                 onPlace={async (row, col) => {
@@ -560,7 +679,7 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
                 }}
               />
             </>
-          )}
+          ) : null}
         </div>
         <aside className="desktop-chat">{chat}</aside>
       </div>
@@ -592,6 +711,29 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
             </Button>
             <Button color="green" onClick={() => setLeaveOpen(false)}>
               Chơi tiếp
+            </Button>
+          </div>
+        </Dialog>
+      )}
+      {restartOpen && (
+        <Dialog
+          title="Bắt đầu game Poker mới?"
+          onClose={() => setRestartOpen(false)}
+        >
+          <p>
+            Game hiện tại sẽ kết thúc ngay. Mỗi người trong phòng, kể cả người
+            đang chờ ván sau, nhận lại 1.000 chip và được chia bài mới.
+          </p>
+          <div className="ds-row">
+            <Button
+              color="orange"
+              disabled={pending || !canRestart}
+              onClick={() => void restart()}
+            >
+              {pending ? 'Đang chia bài…' : 'Bắt đầu game mới'}
+            </Button>
+            <Button onClick={() => setRestartOpen(false)}>
+              Chơi tiếp game hiện tại
             </Button>
           </div>
         </Dialog>
