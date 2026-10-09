@@ -190,14 +190,21 @@ function Chip() {
 function PlayingCard({
   card,
   hidden = false,
+  motion = 'flip',
+  delay = 0,
 }: {
   card?: PokerCard;
   hidden?: boolean;
+  motion?: 'deal' | 'flip';
+  delay?: number;
 }) {
+  const className = motion === 'deal' ? 'is-dealing' : 'is-flipping';
+  const style = { '--card-delay': `${delay}ms` } as CSSProperties;
   if (!card || hidden)
     return (
       <span
-        className="playing-card card-back"
+        className={`playing-card card-back ${className}`}
+        style={style}
         role="img"
         aria-label="Lá bài úp"
       />
@@ -207,8 +214,11 @@ function PlayingCard({
     <span
       className={
         'playing-card ' +
-        (card.suit === 'h' || card.suit === 'd' ? 'card-red' : 'card-black')
+        (card.suit === 'h' || card.suit === 'd' ? 'card-red' : 'card-black') +
+        ' ' +
+        className
       }
+      style={style}
       role="img"
       aria-label={rank + ' ' + suitLabel[card.suit]}
     >
@@ -528,6 +538,8 @@ export function PokerTable({
                     game.communityCards[index]!.code
                   }
                   card={game.communityCards[index]}
+                  motion="flip"
+                  delay={index < 3 ? index * 85 : 0}
                 />
               ) : (
                 <span
@@ -706,9 +718,11 @@ export function PokerTable({
                     >
                       {cards.map((card, cardIndex) => (
                         <PlayingCard
-                          key={card?.code ?? cardIndex}
+                          key={`${game.handNumber}-${card?.code ?? 'hidden'}-${cardIndex}`}
                           card={card}
                           hidden={!card}
+                          motion="deal"
+                          delay={index * 90 + cardIndex * 70}
                         />
                       ))}
                     </div>
@@ -749,9 +763,11 @@ export function PokerTable({
                       >
                         {cards.map((card, cardIndex) => (
                           <PlayingCard
-                            key={card?.code ?? cardIndex}
+                            key={`${game.handNumber}-${card?.code ?? 'hidden'}-${cardIndex}`}
                             card={card}
                             hidden={!card}
+                            motion="deal"
+                            delay={index * 90 + cardIndex * 70}
                           />
                         ))}
                       </div>

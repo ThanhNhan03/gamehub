@@ -11,6 +11,7 @@ import { CaroBoard } from '../games/caro/CaroBoard';
 import { PokerTable } from '../games/poker/PokerTable';
 import { createPlayerLabels } from '../lib/playerNames';
 import { PlayerName } from '../components/PlayerName';
+import { playGameSound } from '../lib/audio';
 
 export function RoomPage({ notify }: { notify: (text: string) => void }) {
   const { code: rawCode = '' } = useParams();
@@ -25,6 +26,58 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
   const [restartOpen, setRestartOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const attempted = useRef('');
+  const previousSoundGame = useRef(game);
+  useEffect(() => {
+    const previous = previousSoundGame.current;
+    previousSoundGame.current = game;
+    if (!game) return;
+    if (
+      !previous ||
+      game.gameId !== previous.gameId ||
+      game.roomCode !== previous.roomCode
+    ) {
+      if (
+        game.gameId === 'poker' &&
+        game.street !== 'between-hands' &&
+        game.players.some((player) => player.holeCards.length)
+      )
+        playGameSound('poker-deal');
+      return;
+    }
+    if (game.gameId === 'caro' && previous.gameId === 'caro') {
+      if (game.status === 'finished' && previous.status !== 'finished') {
+        if (game.winnerId) playGameSound('win');
+      } else if (
+        game.lastMove !== previous.lastMove &&
+        game.lastMove !== null
+      ) {
+        playGameSound('caro-move');
+      }
+      return;
+    }
+    if (game.gameId === 'poker' && previous.gameId === 'poker') {
+      if (game.payouts.length > previous.payouts.length) {
+        playGameSound('win');
+      } else if (game.handNumber !== previous.handNumber) {
+        playGameSound('poker-deal');
+      } else if (game.communityCards.length > previous.communityCards.length) {
+        playGameSound('poker-card');
+      } else if (game.pot > previous.pot) {
+        playGameSound('poker-bet');
+      } else if (
+        game.players.some(
+          (player) =>
+            player.folded &&
+            !previous.players.some(
+              (priorPlayer) =>
+                priorPlayer.id === player.id && priorPlayer.folded,
+            ),
+        )
+      ) {
+        playGameSound('poker-card');
+      }
+    }
+  }, [game]);
   const offset = useMemo(
     () => (room?.serverTime ?? Date.now()) - Date.now(),
     [room?.serverTime],

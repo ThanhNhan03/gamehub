@@ -15,6 +15,12 @@ import { AccessForm } from './components/AccessForm';
 import { useSession } from './store/useSession';
 import { useGameStore } from './store/useGameStore';
 import { socket, connectSession } from './lib/socket';
+import {
+  getBackgroundMusicVolumePercent,
+  setBackgroundMusicEnabled,
+  setBackgroundMusicVolume,
+  setGameEffectsEnabled,
+} from './lib/audio';
 import { Lobby } from './pages/Lobby';
 import { DesignSystem } from './pages/DesignSystem';
 import { RoomPage } from './pages/RoomPage';
@@ -28,7 +34,12 @@ function App() {
     useGameStore();
   const [profile, setProfile] = useState(false);
   const [toast, setToast] = useState('');
+  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [musicVolume, setMusicVolume] = useState(
+    getBackgroundMusicVolumePercent,
+  );
   const previousRoom = useRef<string | null>(null);
+  const musicGestureCleanup = useRef<(() => void) | null>(null);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [pathname]);
@@ -39,6 +50,33 @@ function App() {
     connectSession();
     return () => {
       socket.disconnect();
+    };
+  }, []);
+  useEffect(() => {
+    setGameEffectsEnabled(true);
+    const retryMusic = () => {
+      clearRetryListeners();
+      musicGestureCleanup.current = null;
+      void setBackgroundMusicEnabled(true);
+    };
+    const clearRetryListeners = () => {
+      window.removeEventListener('pointerdown', retryMusic);
+      window.removeEventListener('keydown', retryMusic);
+    };
+    musicGestureCleanup.current = clearRetryListeners;
+    window.addEventListener('pointerdown', retryMusic, { once: true });
+    window.addEventListener('keydown', retryMusic, { once: true });
+    void setBackgroundMusicEnabled(true).then((started) => {
+      if (!started) return;
+      clearRetryListeners();
+      if (musicGestureCleanup.current === clearRetryListeners)
+        musicGestureCleanup.current = null;
+    });
+    return () => {
+      clearRetryListeners();
+      musicGestureCleanup.current = null;
+      void setBackgroundMusicEnabled(false);
+      setGameEffectsEnabled(false);
     };
   }, []);
   useEffect(() => {
@@ -101,6 +139,59 @@ function App() {
               <Avatar variant={session.avatar} />
               <span>{session.nickname || 'Bạn tên gì nhỉ?'}</span>
             </Button>
+            <Button
+              className="icon-button"
+              aria-label={
+                audioEnabled ? 'Tắt nhạc và hiệu ứng' : 'Bật nhạc và hiệu ứng'
+              }
+              aria-pressed={audioEnabled}
+              title={
+                audioEnabled ? 'Tắt nhạc và hiệu ứng' : 'Bật nhạc và hiệu ứng'
+              }
+              onClick={() => {
+                musicGestureCleanup.current?.();
+                musicGestureCleanup.current = null;
+                const enabled = !audioEnabled;
+                setBackgroundMusicEnabled(enabled);
+                setGameEffectsEnabled(enabled);
+                setAudioEnabled(enabled);
+              }}
+            >
+              <Icon name={audioEnabled ? 'sound-on' : 'sound-off'} />
+            </Button>
+            <details className="audio-settings">
+              <summary
+                className="button icon-button bg-cream audio-settings-trigger"
+                aria-label="Chỉnh âm lượng nhạc nền"
+                title="Chỉnh âm lượng nhạc nền"
+              >
+                <Icon name="sliders" />
+              </summary>
+              <div className="audio-settings-popover">
+                <label htmlFor="background-music-volume">
+                  <span>Âm lượng nhạc nền</span>
+                  <output htmlFor="background-music-volume">
+                    {musicVolume}%
+                  </output>
+                </label>
+                <input
+                  id="background-music-volume"
+                  className="audio-volume-slider"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={musicVolume}
+                  aria-label="Âm lượng nhạc nền"
+                  onChange={(event) => {
+                    const volume = Number(event.currentTarget.value);
+                    setMusicVolume(volume);
+                    setBackgroundMusicVolume(volume);
+                  }}
+                />
+                <p>Chỉ chỉnh nhạc nền; âm lượng hiệu ứng vẫn giữ nguyên.</p>
+              </div>
+            </details>
             <Button
               className="icon-button"
               onClick={session.toggleTheme}

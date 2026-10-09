@@ -180,14 +180,14 @@ export function Lobby({
             <h2 id="games-title">Chọn trò, gọi đồng đội!</h2>
           </div>
           <span className="little-note">
-            4 trò quen · cả hội cùng vui <Icon name="spark" size={22} />
+            2 trò đang mở · 2 trò sắp ra mắt <Icon name="spark" size={22} />
           </span>
         </div>
         <div className="game-grid">
           {games.map((g, i) => (
             <motion.article
               key={g.id}
-              className={`game-card panel bg-${g.color}`}
+              className={`game-card panel bg-${g.color}${g.comingSoon ? ' is-coming-soon' : ''}`}
               initial={{ opacity: 0, scale: 0 }}
               animate={{ opacity: 1, scale: [0, 1.06, 1] }}
               transition={{ duration: 0.48, delay: i * 0.1, ease: 'easeOut' }}
@@ -197,22 +197,29 @@ export function Lobby({
                   <Icon name="users" size={16} />
                   {g.players}
                 </span>
+                {g.comingSoon && (
+                  <span className="game-status">Sắp ra mắt</span>
+                )}
                 <span className="game-number">0{i + 1}</span>
               </div>
               <GameArt game={g.id} />
               <div className="game-tag">{g.tag}</div>
               <h3>{g.name}</h3>
               <p>{g.line}</p>
-              <Button className="full-width" onClick={() => setSelected(g.id)}>
-                {g.id === 'caro' || g.id === 'poker' ? 'Chơi ngay' : 'Khám phá'}{' '}
-                <Icon name="arrow" size={20} />
+              <Button
+                className="full-width"
+                disabled={g.comingSoon}
+                onClick={() => setSelected(g.id)}
+              >
+                {g.comingSoon ? 'Sắp ra mắt' : 'Chơi ngay'}{' '}
+                {!g.comingSoon && <Icon name="arrow" size={20} />}
               </Button>
             </motion.article>
           ))}
         </div>
         <p className="release-note">
-          <span className="label-pill">CARO &amp; POKER ĐÃ MỞ BÀN</span> Rủ đồng
-          nghiệp, làm một ván thôi!
+          <span className="label-pill">CARO &amp; POKER ĐÃ MỞ BÀN</span> Tam Sao
+          Thất Bản và Cờ Cá Ngựa đang được chuẩn bị.
         </p>
       </section>
       <section className="rooms-section" aria-labelledby="rooms-title">
@@ -314,8 +321,9 @@ export function Lobby({
           <Button
             className="full-width"
             color={game.color}
-            disabled={busy}
+            disabled={busy || game.comingSoon}
             onClick={() => {
+              if (game.comingSoon) return;
               if (game.id === 'caro' || game.id === 'poker') {
                 void createRoom(game.id);
                 return;
@@ -324,9 +332,7 @@ export function Lobby({
               onProfile();
             }}
           >
-            {game.id === 'caro' || game.id === 'poker'
-              ? `Tạo phòng ${game.name}`
-              : 'Chuẩn bị tên & avatar'}
+            {game.comingSoon ? 'Sắp ra mắt' : `Tạo phòng ${game.name}`}
           </Button>
         </Dialog>
       )}
@@ -338,22 +344,18 @@ export function Lobby({
               <button
                 key={g.id}
                 className={`game-choice bg-${g.color}`}
-                disabled={busy}
+                disabled={busy || g.comingSoon}
                 onClick={() => {
-                  if (g.id === 'caro' || g.id === 'poker') {
-                    void createRoom(g.id);
-                    return;
-                  }
-                  setCreate(false);
-                  setSelected(g.id);
+                  if (g.comingSoon) return;
+                  void createRoom(g.id);
                 }}
               >
                 <GameArt game={g.id} />
                 <span>
                   {g.name}
-                  <small>{g.players}</small>
+                  <small>{g.comingSoon ? 'Sắp ra mắt' : g.players}</small>
                 </span>
-                <Icon name="arrow" />
+                {!g.comingSoon && <Icon name="arrow" />}
               </button>
             ))}
           </div>

@@ -15,7 +15,10 @@ export function Icon({
     | 'users'
     | 'spark'
     | 'check'
-    | 'eye';
+    | 'eye'
+    | 'sound-on'
+    | 'sound-off'
+    | 'sliders';
   size?: number;
 }) {
   return (
@@ -64,6 +67,25 @@ export function Icon({
         <>
           <path d="M3 16s4.5-9 13-9 13 9 13 9-4.5 9-13 9S3 16 3 16Z" />
           <circle cx="16" cy="16" r="4" />
+        </>
+      )}
+      {name === 'sound-on' && (
+        <>
+          <path d="M4 13v6h5l7 5V8l-7 5H4Z" />
+          <path d="M21 12a6 6 0 0 1 0 8m3-12a11 11 0 0 1 0 16" />
+        </>
+      )}
+      {name === 'sound-off' && (
+        <>
+          <path d="M4 13v6h5l7 5V8l-7 5H4Z" />
+          <path d="m21 13 7 7m0-7-7 7" />
+        </>
+      )}
+      {name === 'sliders' && (
+        <>
+          <path d="M5 8h22M5 24h22M13 5v6m6 10v6" />
+          <circle cx="13" cy="8" r="3" fill="var(--cream)" />
+          <circle cx="19" cy="24" r="3" fill="var(--cream)" />
         </>
       )}
     </svg>

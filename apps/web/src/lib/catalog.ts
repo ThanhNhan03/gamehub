@@ -7,6 +7,7 @@ export const games = [
     line: 'Một nước đi, cả phòng nín thở.',
     tag: 'Đấu trí nhẹ nhàng',
     phase: 1,
+    comingSoon: false,
   },
   {
     id: 'telephone',
@@ -16,6 +17,7 @@ export const games = [
     line: 'Vẽ một đằng, đoán một nẻo.',
     tag: 'Cười hết giờ nghỉ',
     phase: 2,
+    comingSoon: true,
   },
   {
     id: 'ludo',
@@ -25,6 +27,7 @@ export const games = [
     line: 'Đồng nghiệp ơi, về chuồng nhé!',
     tag: 'Vui là chính, đá là mười',
     phase: 3,
+    comingSoon: true,
   },
   {
     id: 'poker',
@@ -34,6 +37,7 @@ export const games = [
     line: 'Giữ mặt tỉnh, chơi hết mình.',
     tag: 'Texas Hold’em · chip ảo',
     phase: 4,
+    comingSoon: false,
   },
 ] as const;
 export type GameId = (typeof games)[number]['id'];
