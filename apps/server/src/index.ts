@@ -22,7 +22,9 @@ const io = new Server<ClientEvents, ServerEvents>(http, {
   allowRequest(req, callback) {
     const origin = req.headers.origin;
     const sameOrigin =
-      origin && URL.canParse(origin) && new URL(origin).host === req.headers.host;
+      origin &&
+      URL.canParse(origin) &&
+      new URL(origin).host === req.headers.host;
     callback(null, !origin || !!sameOrigin || origin === env.CORS_ORIGIN);
   },
 });

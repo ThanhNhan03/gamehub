@@ -1,0 +1,26 @@
+{
+  "name": "@gamehub/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gamehub/shared": "workspace:*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router": "^7.12.0",
+    "zustand": "^5.0.10",
+    "framer-motion": "^12.26.0",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "vite": "^7.3.0",
+    "tailwindcss": "^4.1.18",
+    "@tailwindcss/vite": "^4.1.18"
+  }
+}
