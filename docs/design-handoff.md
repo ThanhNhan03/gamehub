@@ -52,8 +52,12 @@ Tất cả fill phẳng, stroke bo tròn, không ảnh hoặc emoji. Hình trang
 | ticker             | 35s lặp              | linear      | trôi ngang, hover tạm dừng     |
 | toast-in           | 200ms                | ease-out    | y 16px → 0                     |
 
-`prefers-reduced-motion`: CSS tắt animation/transition và hover movement, Framer Motion `MotionConfig reducedMotion="user"` tắt transform. Nội dung/trạng thái không phụ thuộc animation. Game-specific motion sẽ bổ sung cùng game.
+`prefers-reduced-motion`: CSS tắt animation/transition và hover movement, Framer Motion `MotionConfig reducedMotion="user"` tắt transform. Nội dung/trạng thái không phụ thuộc animation. Phase 1 bổ sung stone-drop 240ms ease-out, last-pulse 1,8s ease-in-out, win-flash 700ms × 4, confetti-fall 1,8s ease-in. Năm quân thắng có nền vàng và nhãn trên từng ô; kết quả luôn hiện bằng văn bản.
 
-## Hành vi bản duyệt
+## Hành vi Phase 1
 
-Vào phòng kiểm tra định dạng mã rồi báo tính năng đang chuẩn bị. Tạo phòng mở lựa chọn game và thông tin, không tạo state phòng. Không có người hoặc phòng giả. ACCESS_CODE kiểm tra ở socket handshake; số online cập nhật từ server. Tên/avatar/theme lưu ở máy người dùng.
+Tạo/vào phòng Cờ caro hoạt động qua Socket.IO. ACCESS_CODE kiểm tra ở socket handshake trước Lobby; số online và danh sách phòng cập nhật từ server. Tên/avatar/theme/khóa giữ ghế/mã phòng gần nhất lưu ở máy người dùng. Mời đồng nghiệp chép link `/room/<mã>`; link đi qua màn nickname và mã văn phòng trước khi vào phòng.
+
+Phòng chờ dùng cùng shell, màu, SVG và nét viền của Lobby, có 2 ghế online/offline và nhãn chủ phòng. Bắt đầu chỉ bật khi đủ hai người online và chỉ hiện cho chủ phòng. Caro dùng bàn cream 15 × 15, X hồng/O xanh, ô mới đánh và hàng thắng được đánh dấu; countdown 30 giây ở panel đang đến lượt. Mất mạng: banner tên + 60 giây giữ ghế và tạm dừng đồng hồ. Kết quả và chơi lại trong cùng phòng. Bảng chat desktop đặt cạnh bàn; mobile mở sheet từ nút cố định dưới cùng, có safe-area. Bàn mặc định vừa màn hình, Phóng to cho ô khoảng 44px và cuộn; mũi tên/Home/End/Enter hỗ trợ bàn phím.
+
+Các trò khác và component riêng của chúng vẫn chờ phase tương ứng. Phiên bản này có người chơi và phòng thực qua kết nối; client test ở `scripts/` nằm ngoài sản phẩm.

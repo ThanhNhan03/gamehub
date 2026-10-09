@@ -5,10 +5,11 @@ GameHub tiếng Việt cho đồng nghiệp. React + Vite / Node.js + Express + 
 ## Trạng thái bàn giao
 
 - Phase 0 local: monorepo, lệnh dev chung, server `/health`, Socket.IO cùng origin, Lobby và trang bộ giao diện sáng/tối, Dockerfile multi-stage.
-- Lobby là bản duyệt thiết kế. Các nút khám phá mở thông tin trò; tạo/vào phòng thông báo chưa mở. Không tạo phòng giả hoặc hiển thị người chơi giả. Online là số playerId duy nhất đang kết nối.
-- Danh tính và giao diện lưu localStorage; mã văn phòng chỉ giữ sessionStorage. Server kiểm tra mã khi bắt tay socket. Đây chưa phải toàn bộ flow reconnect/phòng của Phase 1.
+- Phase 1 local: tạo/vào phòng bằng mã 4 ký tự, nickname/avatar, link mời, danh sách phòng, chat, chuyển chủ phòng, Cờ caro 15 × 15 hai người thật, 30 giây/nước, kết quả và chơi lại. Các trò khác đang chờ phase tiếp theo. Online là số playerId duy nhất đang kết nối.
+- Danh tính, khóa giữ ghế, mã phòng gần nhất và giao diện lưu localStorage; mã văn phòng chỉ giữ sessionStorage. Server kiểm tra mã trước khi vào Lobby, xác thực khóa giữ ghế và validate tất cả payload. Không tạo phòng hoặc người chơi giả.
+- Mất kết nối: giữ ghế 60 giây, tạm dừng đồng hồ ván; reconnect cùng trình duyệt giữ đúng bàn và lượt, rồi tiếp tục thời gian còn lại. Quá 60 giây thì đối thủ thắng. Rời phòng chủ động xử thua ngay, chuyển chủ phòng cho người còn lại. Phòng trống 10 phút được xóa. Restart mất toàn bộ phòng do dùng RAM.
 - Chưa triển khai online: chờ thông tin VPS của chủ dự án. Docker cần được build/test khi có Docker Engine đang chạy.
-- Dừng duyệt ở design system + Lobby theo brief. Chưa triển khai màn chơi. Phase 1 tiếp theo: phòng, chat, reconnect 60 giây, chủ phòng, Cờ caro hai người thật và test trọn ván. Sau đó lần lượt Tam sao thất bản, Cá ngựa, Poker, hoàn thiện; duyệt và deploy sau mỗi phase.
+- Dừng duyệt sau Phase 1 theo brief. Phase 2 tiếp theo là Tam sao thất bản, rồi Cá ngựa, Poker và hoàn thiện; duyệt và deploy sau mỗi phase khi có VPS.
 
 ## Chạy local
 
@@ -26,7 +27,17 @@ pnpm dev
 - Bộ giao diện: http://localhost:5173/design-system
 - Health: http://localhost:3001/health
 - Vite chuyển tiếp `/socket.io` và `/health` sang server 3001. `PORT` tùy chỉnh dành cho production; nếu đổi cổng server khi dev, cập nhật proxy trong `apps/web/vite.config.ts`.
-- Bấm avatar góc trên, nhập biệt danh và mã văn phòng nếu có để kết nối. Một người mở nhiều tab được đếm một lần theo playerId. Hai trình duyệt/profile khác nhau có danh tính riêng.
+- Nhập biệt danh, chọn avatar và mã văn phòng nếu có ở màn vào chơi. Một người mở nhiều tab cùng origin vẫn có một danh tính và một ghế. Dùng hai trình duyệt/profile khác nhau để thử hai người. Trên máy local, cũng có thể dùng `http://localhost:5173` cho người thứ nhất và `http://127.0.0.1:5173` cho người thứ hai vì hai origin có lưu trữ riêng; nhập cùng mã phòng.
+
+## Thử Phase 1 bằng hai người
+
+1. Người thứ nhất tạo phòng Cờ caro, bấm **Mời đồng nghiệp** và gửi link hoặc mã 4 ký tự.
+2. Người thứ hai mở bằng thiết bị/trình duyệt khác, nhập nickname và mã văn phòng nếu có, vào cùng phòng. Chỉ chủ phòng bắt đầu khi đủ 2 người online.
+3. Gửi chat, đánh luân phiên X/O. Nối ít nhất 5 quân liền nhau theo hàng, cột hoặc chéo để thắng; không xét chặn hai đầu. Hết 30 giây thì thua. Chơi lại đổi người cầm X.
+4. Đóng một tab, mở lại bằng đúng trình duyệt trong 60 giây: tự vào lại phòng, giữ bàn và lượt. Có người offline thì ván tạm dừng và hiện đếm ngược giữ chỗ. Để tab đóng quá 60 giây: người còn lại thắng; người quay lại phải vào phòng cho ván sau.
+5. Trên mobile, chat nằm trong bảng kéo lên bằng nút dưới cùng. Bàn mặc định thu vừa màn hình; **Phóng to** tạo ô khoảng 44px và cho phép cuộn. Có thể chọn ô bằng phím mũi tên/Home/End, Enter để đánh.
+
+Mã văn phòng có thể đặt trong `.env` với `ACCESS_CODE`; lệnh dev đọc file này. Sau khi đổi mã, khởi động lại server. Không xóa localStorage giữa ván: khóa danh tính/giữ ghế sẽ mất. Bài kiểm tra trên URL HTTPS và thiết bị thật chờ VPS.
 
 ## Kiểm tra
 
@@ -39,9 +50,15 @@ pnpm format:check
 pnpm start
 # Trong terminal khác, dùng server riêng không có người khác kết nối:
 pnpm test:smoke
+# Tự khởi chạy server production cô lập và chơi trọn ván:
+pnpm test:phase1
+# Thêm kiểm tra mất mạng đủ 60 giây thực tế:
+pnpm test:phase1:long
 ```
 
-Smoke test là script client riêng trong `scripts/`, chỉ dành cho dev/test; kiểm tra HTTP, route SPA, WebSocket, đếm người, ngắt kết nối và từ chối danh tính sai. Dùng `TEST_URL` và `TEST_ACCESS_CODE` nếu server có cấu hình khác. Script hiện dành cho Phase 0; test trọn ván sẽ thêm cùng từng game.
+Smoke test là script client riêng trong `scripts/`, chỉ dành cho dev/test; kiểm tra HTTP, route SPA, WebSocket, đếm người, ngắt kết nối và từ chối danh tính sai. Dùng `TEST_URL` và `TEST_ACCESS_CODE` nếu server có cấu hình khác. `test:phase1` tự build và mở một server riêng ở cổng ngẫu nhiên, kiểm tra ACCESS_CODE, chống chiếm danh tính, quyền chủ phòng, phòng đầy, validation, chat rate limit, thắng trọn ván, rematch đổi X/O, reconnect giữ state và chuyển host. Bản `:long` chờ hết 60 giây thực tế. Unit test kiểm tra 4 hướng thắng, overline, draw, timeout, absence, chuyển host, giữ ghế, xóa phòng trống và giới hạn sự kiện. Không có client test nào được đưa vào bản web/server production.
+
+Đã kiểm tra Phase 1 local ngày 09/10/2026: 31 unit test, typecheck, lint và build thành công; script production cô lập qua cả trường hợp mất kết nối đủ 60 giây. Hai giao diện đã chơi trọn ván, rematch đổi X/O và mở lại tab giữ nguyên bàn/lượt. Giao diện 390px không tràn ngang; chat mobile gửi được tin nhắn. URL HTTPS, thiết bị thật và Docker chưa được kiểm tra vì chờ VPS/Docker Engine.
 
 ## Build & chạy một container
 
@@ -68,7 +85,7 @@ Thay tên miền và mã trước khi chạy. Nếu không cần mã, để ACCE
 3. Build và chạy bằng hai lệnh Docker ở trên. Chỉ bind cổng ứng dụng vào `127.0.0.1`; public qua HTTPS ở reverse proxy.
 4. Đặt cấu hình Nginx theo `deploy/nginx.conf.example`, đổi tên miền và đường dẫn chứng chỉ. Bật HTTP → HTTPS trên cổng 80. Cho phép 80/443 qua firewall.
 5. Kiểm tra `https://<tên-miền>/health` trả `status: ok`, truy cập Lobby từ điện thoại, chọn nickname; kiểm tra WebSocket `/socket.io` hoạt động qua HTTPS. Client tự dùng origin hiện tại, không có URL production hard-code.
-6. Sau khi duyệt Phase 0, triển khai Phase 1 và thử hai thiết bị thật: vào cùng phòng, đánh hết ván, mở lại tab trong 60 giây và thử mất mạng quá 60 giây.
+6. Thử Phase 1 theo mục kiểm tra hai người ở trên qua URL HTTPS trên hai thiết bị thật. Giữ đúng một instance; không tự ngủ, không bật autoscale.
 
 ### Cập nhật và đổi mã văn phòng
 
@@ -88,11 +105,13 @@ Server phát thông báo khởi động lại trước khi đóng kết nối kh
 
 ```text
 apps/web/src/components   SVG, avatar, nút, dialog
-apps/web/src/pages        Lobby và DesignSystem
+apps/web/src/pages        Lobby, DesignSystem và RoomPage
+apps/web/src/games/caro   Bàn 15 × 15 và điều khiển bàn phím
 apps/web/src/store        Danh tính, tùy chọn giao diện
 apps/web/src/lib          Danh mục và kết nối socket
-apps/server/src/socket   Kiểm tra payload bắt tay
-packages/shared/src      Kiểu PlayerInfo, GameModule, socket events
+apps/server/src/socket   Xác thực, validation và giới hạn sự kiện
+apps/server/src/rooms    RoomStore, timer, reconnect, host và chat RAM
+packages/shared/src      GameModule, contracts và logic Caro thuần
 scripts                  Client kiểm tra tự động, không nằm trong sản phẩm
 deploy                   Ví dụ reverse proxy
 docs                     Handoff giao diện

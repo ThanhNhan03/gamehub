@@ -1,95 +1,74 @@
-import { StrictMode, useEffect, useState } from 'react';
+import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router';
+import {
+  BrowserRouter,
+  Link,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router';
 import { MotionConfig } from 'framer-motion';
 import { Avatar, Icon } from './components/Art';
 import { Button, Dialog } from './components/UI';
+import { AccessForm } from './components/AccessForm';
 import { useSession } from './store/useSession';
-import { socket } from './lib/socket';
+import { useGameStore } from './store/useGameStore';
+import { socket, connectSession } from './lib/socket';
 import { Lobby } from './pages/Lobby';
 import { DesignSystem } from './pages/DesignSystem';
+import { RoomPage } from './pages/RoomPage';
 import './styles.css';
 
 function App() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const session = useSession();
+  const { connected, authorized, lobby, room, roomError, restarting } =
+    useGameStore();
+  const [profile, setProfile] = useState(false);
+  const [toast, setToast] = useState('');
+  const previousRoom = useRef<string | null>(null);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [pathname]);
-  const session = useSession();
-  const [profile, setProfile] = useState(false);
-  const [nickname, setNickname] = useState(session.nickname);
-  const [avatar, setAvatar] = useState(session.avatar);
-  const [code, setCode] = useState(
-    sessionStorage.getItem('gamehub-office-code') ?? '',
-  );
-  const [online, setOnline] = useState<number | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [error, setError] = useState('');
-  const [toast, setToast] = useState('');
   useEffect(() => {
     document.documentElement.dataset.theme = session.theme;
   }, [session.theme]);
   useEffect(() => {
-    if (!session.nickname) return;
-    socket.auth = {
-      playerId: session.playerId,
-      nickname: session.nickname,
-      avatar: session.avatar,
-      accessCode: sessionStorage.getItem('gamehub-office-code') ?? '',
-    };
-    socket.connect();
+    connectSession();
     return () => {
       socket.disconnect();
     };
-  }, [session.playerId, session.nickname, session.avatar]);
-  useEffect(() => {
-    const onConnect = () => {
-      setConnected(true);
-      setError('');
-      setProfile(false);
-    };
-    const onDisconnect = () => {
-      setConnected(false);
-      setOnline(null);
-    };
-    const onError = (e: Error) => {
-      setConnected(false);
-      if (
-        e.message.includes('Mã văn phòng') ||
-        e.message.includes('Thông tin')
-      ) {
-        setError(e.message);
-        setProfile(true);
-      } else setToast('Chưa kết nối được máy chủ. Đang thử lại...');
-    };
-    const onPresence = (s: { online: number }) => setOnline(s.online);
-    const onRestart = (message: string) => setToast(message);
-    socket
-      .on('connect', onConnect)
-      .on('disconnect', onDisconnect)
-      .on('connect_error', onError)
-      .on('lobby:state', onPresence)
-      .on('server:restarting', onRestart);
-    return () => {
-      socket
-        .off('connect', onConnect)
-        .off('disconnect', onDisconnect)
-        .off('connect_error', onError)
-        .off('lobby:state', onPresence)
-        .off('server:restarting', onRestart);
-    };
   }, []);
   useEffect(() => {
+    if (room) {
+      if (
+        previousRoom.current !== room.code &&
+        pathname !== `/room/${room.code}`
+      )
+        navigate(`/room/${room.code}`);
+      previousRoom.current = room.code;
+    } else if (previousRoom.current) {
+      previousRoom.current = null;
+      if (pathname.startsWith('/room/')) navigate('/');
+    }
+  }, [room?.code, pathname, navigate]);
+  useEffect(() => {
+    if (connected) setProfile(false);
+  }, [connected]);
+  useEffect(() => {
+    if (roomError) {
+      setToast(roomError);
+      useGameStore.setState({ roomError: '' });
+      if (pathname.startsWith('/room/')) navigate('/');
+    }
+  }, [roomError, pathname, navigate]);
+  useEffect(() => {
     if (!toast) return;
-    const timeout = setTimeout(() => setToast(''), 5000);
-    return () => clearTimeout(timeout);
+    const timer = setTimeout(() => setToast(''), 5000);
+    return () => clearTimeout(timer);
   }, [toast]);
-  function openProfile() {
-    setNickname(session.nickname);
-    setAvatar(session.avatar);
-    setError('');
-    setProfile(true);
-  }
   return (
     <MotionConfig reducedMotion="user">
       <a className="skip-link" href="#main">
@@ -110,14 +89,14 @@ function App() {
           <nav className="header-actions" aria-label="Cá nhân và giao diện">
             <span className="presence">
               <i className={connected ? 'online-dot' : 'offline-dot'} />
-              {online === null
-                ? 'Chưa kết nối'
-                : `${online} đồng nghiệp online`}
+              {connected
+                ? `${lobby.online} đồng nghiệp online`
+                : 'Chưa kết nối'}
             </span>
             <Button
               className="profile-chip"
               aria-label="Chọn tên và avatar"
-              onClick={openProfile}
+              onClick={() => setProfile(true)}
             >
               <Avatar variant={session.avatar} />
               <span>{session.nickname || 'Bạn tên gì nhỉ?'}</span>
@@ -136,27 +115,46 @@ function App() {
           </nav>
         </header>
         <main id="main">
-          <Routes>
-            <Route
-              path="/"
-              element={<Lobby onProfile={openProfile} notify={setToast} />}
-            />
-            <Route
-              path="/design-system"
-              element={<DesignSystem notify={setToast} />}
-            />
-            <Route
-              path="*"
-              element={
-                <div className="panel empty-state">
-                  <h1>Lạc phòng rồi!</h1>
-                  <Link className="button bg-green" to="/">
-                    Về sảnh thôi
-                  </Link>
-                </div>
-              }
-            />
-          </Routes>
+          {!authorized && pathname !== '/design-system' ? (
+            <section className="access-gate panel">
+              <span className="eyebrow">ĐIỂM DANH RỒI VÀO CHƠI</span>
+              <h1>Chào đồng đội!</h1>
+              <p>
+                Chọn một gương mặt, thêm một cái tên.
+                <br />
+                Hội mình đang chờ bạn đó.
+              </p>
+              <AccessForm />
+            </section>
+          ) : (
+            <Routes>
+              <Route
+                path="/"
+                element={
+                  <Lobby onProfile={() => setProfile(true)} notify={setToast} />
+                }
+              />
+              <Route
+                path="/room/:code"
+                element={<RoomPage notify={setToast} />}
+              />
+              <Route
+                path="/design-system"
+                element={<DesignSystem notify={setToast} />}
+              />
+              <Route
+                path="*"
+                element={
+                  <div className="panel empty-state">
+                    <h1>Lạc phòng rồi!</h1>
+                    <Link className="button bg-green" to="/">
+                      Về sảnh thôi
+                    </Link>
+                  </div>
+                }
+              />
+            </Routes>
+          )}
         </main>
         <footer className="footer">
           <Link to="/design-system">Bộ giao diện</Link>
@@ -176,78 +174,30 @@ function App() {
           {toast}
         </div>
       )}
-      {profile && (
+      {restarting && (
+        <div className="system-banner" role="alert">
+          {restarting}
+        </div>
+      )}
+      {authorized && !connected && (
+        <div className="reconnect-overlay" role="status">
+          <div className="panel">
+            <Icon name="pad" size={50} />
+            <h2>Đang kết nối lại...</h2>
+            <p>Giữ nguyên trang này nhé. Ghế của bạn được giữ 60 giây.</p>
+            <Button color="blue" onClick={connectSession}>
+              Thử kết nối lại
+            </Button>
+          </div>
+        </div>
+      )}
+      {profile && authorized && (
         <Dialog
           title="Điểm danh trước khi chơi!"
           onClose={() => setProfile(false)}
         >
           <p>Chọn một gương mặt, thêm một cái tên. Thế là quen!</p>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const clean = nickname.trim();
-              if (!clean) {
-                setError('Cho mọi người biết tên bạn nhé.');
-                return;
-              }
-              sessionStorage.setItem('gamehub-office-code', code);
-              session.saveProfile(clean, avatar);
-              socket.auth = {
-                playerId: session.playerId,
-                nickname: clean,
-                avatar,
-                accessCode: code,
-              };
-              socket.disconnect().connect();
-              setError('');
-            }}
-          >
-            <label className="field">
-              Biệt danh của bạn
-              <input
-                autoFocus
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                maxLength={24}
-                required
-                placeholder="Ví dụ: Minh mê cờ"
-              />
-            </label>
-            <fieldset className="avatar-picker">
-              <legend>Chọn gương mặt đại diện</legend>
-              {Array.from({ length: 8 }, (_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  aria-label={`Gương mặt ${i + 1}`}
-                  aria-pressed={avatar === i}
-                  onClick={() => setAvatar(i)}
-                >
-                  <Avatar variant={i} size={52} />
-                </button>
-              ))}
-            </fieldset>
-            <label className="field">
-              Mã văn phòng{' '}
-              <span className="helper">(nếu văn phòng có đặt)</span>
-              <input
-                type="password"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                maxLength={128}
-                autoComplete="off"
-                placeholder="Nhập mã được chia sẻ"
-              />
-            </label>
-            {error && (
-              <p className="field-error" role="alert">
-                {error}
-              </p>
-            )}
-            <Button type="submit" color="green" className="full-width">
-              Vào chơi <Icon name="arrow" />
-            </Button>
-          </form>
+          <AccessForm />
         </Dialog>
       )}
     </MotionConfig>

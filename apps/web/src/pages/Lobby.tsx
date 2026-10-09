@@ -3,6 +3,9 @@ import { motion } from 'framer-motion';
 import { GameArt, HeroArt, Icon } from '../components/Art';
 import { Button, Dialog } from '../components/UI';
 import { games, type GameId } from '../lib/catalog';
+import { useGameStore } from '../store/useGameStore';
+import { request } from '../lib/socket';
+import { Link, useNavigate } from 'react-router';
 
 export function Lobby({
   onProfile,
@@ -20,6 +23,32 @@ export function Lobby({
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<GameId | null>(null);
   const [create, setCreate] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const { lobby, room } = useGameStore();
+  const navigate = useNavigate();
+  async function createRoom() {
+    setBusy(true);
+    const result = await request('room:create', {
+      gameId: 'caro',
+      maxPlayers: 2,
+    });
+    setBusy(false);
+    if (!result.ok) notify(result.error.message);
+    else {
+      setCreate(false);
+      setSelected(null);
+      navigate(`/room/${result.code}`);
+    }
+  }
+  async function joinRoom(code: string) {
+    setBusy(true);
+    const result = await request('room:join', { code });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      notify(result.error.message);
+    } else navigate(`/room/${result.code}`);
+  }
   const game = games.find((g) => g.id === selected);
   return (
     <>
@@ -67,9 +96,7 @@ export function Lobby({
               return;
             }
             setError('');
-            notify(
-              'Vào phòng sẽ mở ở bản chơi Cờ caro. Hiện tại bạn có thể xem giao diện sảnh.',
-            );
+            void joinRoom(code);
           }}
         >
           <label className="sr-only" htmlFor="room-code">
@@ -90,7 +117,7 @@ export function Lobby({
               setError('');
             }}
           />
-          <Button type="submit" color="green">
+          <Button type="submit" color="green" disabled={busy}>
             Vào phòng <Icon name="arrow" size={20} />
           </Button>
         </form>
@@ -108,6 +135,14 @@ export function Lobby({
           </p>
         )}
       </section>
+      {room && (
+        <div className="notice resume-room">
+          Bạn đang có ghế ở phòng <strong>{room.code}</strong>
+          <Link className="button bg-blue" to={`/room/${room.code}`}>
+            Về phòng
+          </Link>
+        </div>
+      )}
       <section className="games-section" aria-labelledby="games-title">
         <div className="section-heading">
           <div>
@@ -139,35 +174,77 @@ export function Lobby({
               <h3>{g.name}</h3>
               <p>{g.line}</p>
               <Button className="full-width" onClick={() => setSelected(g.id)}>
-                Khám phá <Icon name="arrow" size={20} />
+                {g.id === 'caro' ? 'Chơi ngay' : 'Khám phá'}{' '}
+                <Icon name="arrow" size={20} />
               </Button>
             </motion.article>
           ))}
         </div>
         <p className="release-note">
-          <span className="label-pill">ĐANG CHUẨN BỊ</span> Sảnh đã lên đèn. Các
-          bàn chơi sẽ lần lượt mở cửa!
+          <span className="label-pill">CARO ĐÃ MỞ BÀN</span> Rủ một đồng nghiệp,
+          làm một ván thôi!
         </p>
       </section>
       <section className="rooms-section" aria-labelledby="rooms-title">
         <div className="section-heading">
           <h2 id="rooms-title">
-            Phòng đang mở <span className="count-badge">0</span>
+            Phòng đang mở{' '}
+            <span className="count-badge">{lobby.rooms.length}</span>
           </h2>
           <span className="little-note">Có bạn, có hội, có vui.</span>
         </div>
-        <div className="empty-rooms panel">
-          <span className="empty-illustration">
-            <Icon name="users" size={48} />
-          </span>
-          <div>
-            <h3>Chưa có kèo nào. Rủ hội mình nhé?</h3>
-            <p>Tính năng tạo và vào phòng sẽ mở cùng Cờ caro.</p>
+        {lobby.rooms.length > 0 ? (
+          <div className="room-list">
+            {lobby.rooms.map((r) => (
+              <div className="room-row panel" key={r.code}>
+                <span className="room-code-badge">{r.code}</span>
+                <div>
+                  <h3>Cờ caro</h3>
+                  <p>
+                    Chủ phòng: {r.hostName} · {r.count}/{r.maxPlayers} người ·{' '}
+                    {r.status === 'playing'
+                      ? 'Đang chơi'
+                      : r.status === 'finished'
+                        ? 'Vừa xong ván'
+                        : 'Chờ đồng đội'}
+                  </p>
+                </div>
+                <Button
+                  color="green"
+                  disabled={
+                    busy ||
+                    (r.count >= r.maxPlayers && room?.code !== r.code) ||
+                    (r.status === 'playing' && room?.code !== r.code)
+                  }
+                  onClick={() => void joinRoom(r.code)}
+                >
+                  {room?.code === r.code
+                    ? 'Về phòng'
+                    : r.count >= r.maxPlayers
+                      ? 'Đã đủ người'
+                      : 'Vào phòng'}
+                </Button>
+              </div>
+            ))}
           </div>
-          <Button color="cream" onClick={onProfile}>
-            Chọn tên & avatar <Icon name="arrow" size={20} />
-          </Button>
-        </div>
+        ) : (
+          <div className="empty-rooms panel">
+            <span className="empty-illustration">
+              <Icon name="users" size={48} />
+            </span>
+            <div>
+              <h3>Chưa có kèo nào. Rủ hội mình nhé?</h3>
+              <p>Tạo phòng Cờ caro, gửi mã cho một đồng nghiệp!</p>
+            </div>
+            <Button
+              color="cream"
+              onClick={() => void createRoom()}
+              disabled={busy}
+            >
+              Tạo phòng Cờ caro <Icon name="arrow" size={20} />
+            </Button>
+          </div>
+        )}
       </section>
       {selected && game && (
         <Dialog title={game.name} onClose={() => setSelected(null)}>
@@ -187,17 +264,24 @@ export function Lobby({
                   : 'Texas Hold’em. Mỗi người bắt đầu với 1.000 chip ảo. Chip ảo, chơi cho vui, không quy đổi tiền.'}
           </p>
           <div className="notice">
-            Bàn chơi đang được chuẩn bị. Mọi đối thủ đều là đồng nghiệp thật.
+            {game.id === 'caro'
+              ? 'Chơi cùng một đồng nghiệp thật. Gửi link mời rồi bắt đầu!'
+              : 'Bàn chơi đang được chuẩn bị. Mọi đối thủ đều là đồng nghiệp thật.'}
           </div>
           <Button
             className="full-width"
             color={game.color}
+            disabled={busy}
             onClick={() => {
+              if (game.id === 'caro') {
+                void createRoom();
+                return;
+              }
               setSelected(null);
               onProfile();
             }}
           >
-            Chuẩn bị tên & avatar
+            {game.id === 'caro' ? 'Tạo phòng Cờ caro' : 'Chuẩn bị tên & avatar'}
           </Button>
         </Dialog>
       )}
@@ -209,7 +293,12 @@ export function Lobby({
               <button
                 key={g.id}
                 className={`game-choice bg-${g.color}`}
+                disabled={busy}
                 onClick={() => {
+                  if (g.id === 'caro') {
+                    void createRoom();
+                    return;
+                  }
                   setCreate(false);
                   setSelected(g.id);
                 }}
@@ -224,8 +313,8 @@ export function Lobby({
             ))}
           </div>
           <div className="notice">
-            Tạo phòng sẽ mở cùng bản chơi đầu tiên. Hiện tại hãy khám phá các
-            trò nhé!
+            Cờ caro: 2 người · bàn 15 × 15 · 30 giây mỗi nước. Các trò khác sẽ
+            mở lần lượt.
           </div>
         </Dialog>
       )}
