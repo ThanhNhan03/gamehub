@@ -7,6 +7,7 @@ import {
   type CaroState,
   type PlayerInfo,
   type RoomPlayer,
+  type RoomSpectator,
   type RoomView,
   type RoomSummary,
   type ChatMessage,
@@ -25,6 +26,7 @@ export interface Room {
   code: string;
   hostId: string | null;
   players: RoomPlayer[];
+  spectators: RoomSpectator[];
   chat: ChatMessage[];
   game: CaroState | null;
   deadline: number | null;
@@ -48,8 +50,15 @@ export class RoomStore {
         if (
           room.emptySince !== null &&
           Date.now() - room.emptySince >= EMPTY_ROOM_MS
-        )
+        ) {
           this.rooms.delete(code);
+          for (const member of [...room.players, ...room.spectators]) {
+            this.membership.delete(member.id);
+            this.clearAbsent(member.id);
+            this.removed(member.id);
+          }
+          if (room.turnTimer) clearTimeout(room.turnTimer);
+        }
       }
     }, 30_000);
     this.cleanupTimer.unref();
@@ -78,6 +87,15 @@ export class RoomStore {
       this.removePlayer(room!, player.id);
       seat = undefined;
     }
+    let viewer = room?.spectators.find((item) => item.id === player.id);
+    if (
+      viewer?.reconnectUntil !== null &&
+      viewer?.reconnectUntil !== undefined &&
+      Date.now() >= viewer.reconnectUntil
+    ) {
+      this.removeSpectator(room!, player.id);
+      viewer = undefined;
+    }
     if (room && seat) {
       Object.assign(seat, player, { online: true, reconnectUntil: null });
       if (room.game)
@@ -95,6 +113,10 @@ export class RoomStore {
       )
         this.startClock(room, room.remaining);
       this.publish(room);
+    } else if (room && viewer) {
+      Object.assign(viewer, player, { online: true, reconnectUntil: null });
+      this.clearAbsent(player.id);
+      this.publish(room);
     } else this.lobbyChanged();
   }
   disconnect(playerId: string, socketId: string) {
@@ -105,6 +127,23 @@ export class RoomStore {
     const code = this.membership.get(playerId);
     const room = code ? this.rooms.get(code) : undefined;
     const player = room?.players.find((p) => p.id === playerId);
+    const viewer = room?.spectators.find((p) => p.id === playerId);
+    if (room && viewer) {
+      viewer.online = false;
+      viewer.reconnectUntil = Date.now() + RECONNECT_MS;
+      this.clearAbsent(playerId);
+      const timer = setTimeout(() => {
+        if (
+          !this.isOnline(playerId) &&
+          this.membership.get(playerId) === room.code
+        )
+          this.removeSpectator(room, playerId);
+      }, RECONNECT_MS);
+      timer.unref();
+      this.absentTimers.set(playerId, timer);
+      this.publish(room);
+      return;
+    }
     if (!room || !player) {
       this.lobbyChanged();
       return;
@@ -121,8 +160,11 @@ export class RoomStore {
       if (
         !this.isOnline(playerId) &&
         this.membership.get(playerId) === room.code
-      )
-        this.removePlayer(room, playerId);
+      ) {
+        if (room.players.some((item) => item.id === playerId))
+          this.removePlayer(room, playerId);
+        else this.removeSpectator(room, playerId);
+      }
     }, RECONNECT_MS);
     timer.unref();
     this.absentTimers.set(playerId, timer);
@@ -152,6 +194,7 @@ export class RoomStore {
       remaining: TURN_MS,
       emptySince: null,
       turnTimer: null,
+      spectators: [],
     };
     this.rooms.set(code, room);
     this.membership.set(player.id, code);
@@ -197,8 +240,110 @@ export class RoomStore {
     this.publish(room);
     return code;
   }
+  spectate(player: PlayerInfo, code: string) {
+    const room = this.rooms.get(code);
+    if (!room)
+      throw new RoomError(
+        'ROOM_NOT_FOUND',
+        'Không tìm thấy phòng. Kiểm tra lại mã nhé!',
+      );
+    const existing = this.membership.get(player.id);
+    if (existing === code) {
+      this.publish(room);
+      return code;
+    }
+    if (existing)
+      throw new RoomError(
+        'ALREADY_IN_ROOM',
+        'Rời phòng hiện tại trước khi vào phòng khác nhé.',
+      );
+    room.spectators.push({
+      ...player,
+      online: true,
+      reconnectUntil: null,
+      requestedSeat: false,
+      invitedBy: null,
+    });
+    this.membership.set(player.id, code);
+    this.publish(room);
+    return code;
+  }
+  requestSeat(playerId: string) {
+    const room = this.forPlayer(playerId);
+    const viewer = room.spectators.find((item) => item.id === playerId);
+    if (!viewer)
+      throw new RoomError(
+        'SPECTATOR_ONLY',
+        'Chỉ spectator mới gửi yêu cầu vào chơi được.',
+      );
+    viewer.requestedSeat = !viewer.requestedSeat;
+    this.publish(room);
+  }
+  inviteSpectator(playerId: string, spectatorId: string) {
+    const room = this.forPlayer(playerId);
+    if (!room.players.some((player) => player.id === playerId))
+      throw new RoomError(
+        'PLAYER_ONLY',
+        'Người chơi trong phòng mới gửi lời mời được.',
+      );
+    if (room.players.length >= 2 || room.game?.status === 'playing')
+      throw new RoomError(
+        'SEAT_UNAVAILABLE',
+        'Phòng chưa có ghế trống để mời vào chơi.',
+      );
+    const viewer = room.spectators.find((item) => item.id === spectatorId);
+    if (!viewer || !viewer.online || viewer.id === playerId)
+      throw new RoomError(
+        'SPECTATOR_NOT_FOUND',
+        'Spectator này không còn ở trong phòng.',
+      );
+    if (viewer.invitedBy)
+      throw new RoomError(
+        'INVITE_PENDING',
+        'Spectator này đã có một lời mời đang chờ.',
+      );
+    viewer.invitedBy = playerId;
+    this.publish(room);
+  }
+  answerSeatRequest(playerId: string, spectatorId: string, accept: boolean) {
+    const room = this.forPlayer(playerId);
+    if (!room.players.some((player) => player.id === playerId))
+      throw new RoomError(
+        'PLAYER_ONLY',
+        'Chỉ người chơi trong phòng mới duyệt được yêu cầu.',
+      );
+    const viewer = room.spectators.find((item) => item.id === spectatorId);
+    if (!viewer?.requestedSeat)
+      throw new RoomError(
+        'REQUEST_NOT_FOUND',
+        'Yêu cầu vào chơi này không còn nữa.',
+      );
+    if (accept) this.promoteSpectator(room, viewer);
+    else {
+      viewer.requestedSeat = false;
+      this.publish(room);
+    }
+  }
+  answerSeatInvite(playerId: string, accept: boolean) {
+    const room = this.forPlayer(playerId);
+    const viewer = room.spectators.find((item) => item.id === playerId);
+    if (!viewer?.invitedBy)
+      throw new RoomError(
+        'INVITE_NOT_FOUND',
+        'Không còn lời mời vào chơi đang chờ.',
+      );
+    if (accept) this.promoteSpectator(room, viewer);
+    else {
+      viewer.invitedBy = null;
+      this.publish(room);
+    }
+  }
   leave(playerId: string) {
     const room = this.forPlayer(playerId);
+    if (room.spectators.some((viewer) => viewer.id === playerId)) {
+      this.removeSpectator(room, playerId);
+      return;
+    }
     this.removePlayer(room, playerId);
   }
   start(playerId: string, rematch: boolean) {
@@ -250,7 +395,9 @@ export class RoomStore {
   }
   chat(playerId: string, text: string) {
     const room = this.forPlayer(playerId);
-    const player = room.players.find((p) => p.id === playerId)!;
+    const player =
+      room.players.find((p) => p.id === playerId) ??
+      room.spectators.find((p) => p.id === playerId)!;
     const message: ChatMessage = {
       id: randomUUID(),
       playerId,
@@ -277,6 +424,7 @@ export class RoomStore {
       hostName: room.players.find((p) => p.id === room.hostId)?.nickname ?? '',
       count: room.players.length,
       maxPlayers: 2,
+      spectatorCount: room.spectators.filter((viewer) => viewer.online).length,
       status: room.game?.status ?? 'waiting',
     };
   }
@@ -290,6 +438,7 @@ export class RoomStore {
       ...this.summary(room),
       hostId: room.hostId,
       players: room.players.map((p) => ({ ...p })),
+      spectators: room.spectators.map((viewer) => ({ ...viewer })),
       chat: [...room.chat],
       deadline: room.deadline,
       serverTime: Date.now(),
@@ -341,6 +490,41 @@ export class RoomStore {
       room.emptySince = Date.now();
       this.stopClock(room);
     }
+    this.publish(room);
+  }
+  private removeSpectator(room: Room, playerId: string) {
+    this.clearAbsent(playerId);
+    room.spectators = room.spectators.filter(
+      (viewer) => viewer.id !== playerId,
+    );
+    this.membership.delete(playerId);
+    this.removed(playerId);
+    if (!room.players.length && !room.spectators.length)
+      room.emptySince = Date.now();
+    this.publish(room);
+  }
+  private promoteSpectator(room: Room, viewer: RoomSpectator) {
+    if (room.players.length >= 2 || room.game?.status === 'playing')
+      throw new RoomError(
+        'SEAT_UNAVAILABLE',
+        'Ghế chơi sẽ mở sau khi ván này kết thúc.',
+      );
+    if (!viewer.online)
+      throw new RoomError(
+        'SPECTATOR_OFFLINE',
+        'Spectator cần kết nối lại trước khi nhận ghế.',
+      );
+    room.spectators = room.spectators.filter((item) => item.id !== viewer.id);
+    room.players.push({
+      id: viewer.id,
+      nickname: viewer.nickname,
+      avatar: viewer.avatar,
+      online: true,
+      reconnectUntil: null,
+    });
+    room.hostId ??= viewer.id;
+    room.emptySince = null;
+    this.clearAbsent(viewer.id);
     this.publish(room);
   }
 }

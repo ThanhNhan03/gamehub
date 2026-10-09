@@ -60,4 +60,8 @@ Tạo/vào phòng Cờ caro hoạt động qua Socket.IO. ACCESS_CODE kiểm tra
 
 Phòng chờ dùng cùng shell, màu, SVG và nét viền của Lobby, có 2 ghế online/offline và nhãn chủ phòng. Bắt đầu chỉ bật khi đủ hai người online và chỉ hiện cho chủ phòng. Caro dùng bàn cream 15 × 15, X hồng/O xanh, ô mới đánh và hàng thắng được đánh dấu; countdown 30 giây ở panel đang đến lượt. Mất mạng: banner tên + 60 giây giữ ghế và tạm dừng đồng hồ. Kết quả và chơi lại trong cùng phòng. Bảng chat desktop đặt cạnh bàn; mobile mở sheet từ nút cố định dưới cùng, có safe-area. Bàn mặc định vừa màn hình, Phóng to cho ô khoảng 44px và cuộn; mũi tên/Home/End/Enter hỗ trợ bàn phím.
 
+Spectator dùng nút biểu tượng mắt ở danh sách phòng hoặc cạnh ô nhập mã trong sảnh; spectator không chiếm ghế, có thể theo dõi bàn và cùng chat với người chơi. Chat desktop rộng hơn và cao hơn; mobile dùng sheet cao hơn để đọc hội thoại thuận tiện.
+
+Khi phòng có ghế trống, bất kỳ người chơi nào cũng có nút mời cạnh tên spectator. Spectator có thể gửi/yêu cầu rút yêu cầu; người chơi trong phòng có thể duyệt hoặc bỏ qua. Lời mời có chấp nhận/từ chối; chỉ chuyển vai trò sang người chơi khi ván đã kết thúc hoặc phòng đang chờ.
+
 Các trò khác và component riêng của chúng vẫn chờ phase tương ứng. Phiên bản này có người chơi và phòng thực qua kết nối; client test ở `scripts/` nằm ngoài sản phẩm.

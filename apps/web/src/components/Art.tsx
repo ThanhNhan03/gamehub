@@ -14,7 +14,8 @@ export function Icon({
     | 'close'
     | 'users'
     | 'spark'
-    | 'check';
+    | 'check'
+    | 'eye';
   size?: number;
 }) {
   return (
@@ -59,6 +60,12 @@ export function Icon({
         <path d="m16 2 4 10 10 4-10 4-4 10-4-10-10-4 10-4Z" />
       )}
       {name === 'check' && <path d="m6 16 7 7L27 8" />}
+      {name === 'eye' && (
+        <>
+          <path d="M3 16s4.5-9 13-9 13 9 13 9-4.5 9-13 9S3 16 3 16Z" />
+          <circle cx="16" cy="16" r="4" />
+        </>
+      )}
     </svg>
   );
 }

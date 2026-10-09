@@ -6,6 +6,9 @@ GameHub tiếng Việt cho đồng nghiệp. React + Vite / Node.js + Express + 
 
 - Phase 0 local: monorepo, lệnh dev chung, server `/health`, Socket.IO cùng origin, Lobby và trang bộ giao diện sáng/tối, Dockerfile multi-stage.
 - Phase 1 local: tạo/vào phòng bằng mã 4 ký tự, nickname/avatar, link mời, danh sách phòng, chat, chuyển chủ phòng, Cờ caro 15 × 15 hai người thật, 30 giây/nước, kết quả và chơi lại. Các trò khác đang chờ phase tiếp theo. Online là số playerId duy nhất đang kết nối.
+- Spectator: từ danh sách phòng hoặc nhập mã, dùng nút biểu tượng con mắt để xem ván mà không chiếm ghế; spectator có thể gửi/nhận chat chung cùng người chơi. Danh sách spectator, trạng thái online và chat dùng cùng vòng reconnect 60 giây.
+- Bất kỳ người chơi nào trong phòng có ghế trống đều mời được spectator vào ghế chơi. Spectator cũng có thể gửi yêu cầu; người chơi trong phòng duyệt/từ chối. Yêu cầu có thể chờ trong lúc ván đang chạy; nhận lời mời chỉ chuyển thành ghế khi ván không còn diễn ra.
+- Khung chat desktop được mở rộng, có vùng tin nhắn cao hơn; trên mobile, bảng chat chiếm thêm chiều cao màn hình.
 - Danh tính, khóa giữ ghế, mã phòng gần nhất và giao diện lưu localStorage; mã văn phòng chỉ giữ sessionStorage. Server kiểm tra mã trước khi vào Lobby, xác thực khóa giữ ghế và validate tất cả payload. Không tạo phòng hoặc người chơi giả.
 - Mất kết nối: giữ ghế 60 giây, tạm dừng đồng hồ ván; reconnect cùng trình duyệt giữ đúng bàn và lượt, rồi tiếp tục thời gian còn lại. Quá 60 giây thì đối thủ thắng. Rời phòng chủ động xử thua ngay, chuyển chủ phòng cho người còn lại. Phòng trống 10 phút được xóa. Restart mất toàn bộ phòng do dùng RAM.
 - Chưa triển khai online: chờ thông tin VPS của chủ dự án. Docker cần được build/test khi có Docker Engine đang chạy.
@@ -35,7 +38,9 @@ pnpm dev
 2. Người thứ hai mở bằng thiết bị/trình duyệt khác, nhập nickname và mã văn phòng nếu có, vào cùng phòng. Chỉ chủ phòng bắt đầu khi đủ 2 người online.
 3. Gửi chat, đánh luân phiên X/O. Nối ít nhất 5 quân liền nhau theo hàng, cột hoặc chéo để thắng; không xét chặn hai đầu. Hết 30 giây thì thua. Chơi lại đổi người cầm X.
 4. Đóng một tab, mở lại bằng đúng trình duyệt trong 60 giây: tự vào lại phòng, giữ bàn và lượt. Có người offline thì ván tạm dừng và hiện đếm ngược giữ chỗ. Để tab đóng quá 60 giây: người còn lại thắng; người quay lại phải vào phòng cho ván sau.
-5. Trên mobile, chat nằm trong bảng kéo lên bằng nút dưới cùng. Bàn mặc định thu vừa màn hình; **Phóng to** tạo ô khoảng 44px và cho phép cuộn. Có thể chọn ô bằng phím mũi tên/Home/End, Enter để đánh.
+5. Ở sảnh, bấm nút con mắt cạnh phòng hoặc nhập mã rồi bấm nút con mắt để vào xem. Spectator theo dõi bàn cờ và chat mà không chiếm ghế; bấm **Rời phòng** khi muốn thoát.
+6. Spectator bấm **Yêu cầu vào chơi**; người chơi có thể duyệt yêu cầu hoặc bấm **Mời vào chơi** cạnh tên spectator. Người được mời chấp nhận để nhận ghế; các yêu cầu vẫn chờ khi ván chưa kết thúc.
+7. Trên mobile, chat nằm trong bảng kéo lên bằng nút dưới cùng. Bàn mặc định thu vừa màn hình; **Phóng to** tạo ô khoảng 44px và cho phép cuộn. Có thể chọn ô bằng phím mũi tên/Home/End, Enter để đánh.
 
 Mã văn phòng có thể đặt trong `.env` với `ACCESS_CODE`; lệnh dev đọc file này. Sau khi đổi mã, khởi động lại server. Không xóa localStorage giữa ván: khóa danh tính/giữ ghế sẽ mất. Bài kiểm tra trên URL HTTPS và thiết bị thật chờ VPS.
 

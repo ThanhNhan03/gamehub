@@ -5,6 +5,7 @@ export type {
   ClientEvents,
   RoomView,
   RoomPlayer,
+  RoomSpectator,
   RoomSummary,
   ChatMessage,
   LobbyState,

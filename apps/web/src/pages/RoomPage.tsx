@@ -16,6 +16,7 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
   const { room, game, connected, restoring, roomError } = useGameStore();
   const session = useSession();
   const [pending, setPending] = useState(false);
+  const [seatBusy, setSeatBusy] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -74,6 +75,34 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
     setPending(false);
     if (!result.ok) notify(result.error.message);
   }
+  async function requestSeat() {
+    setSeatBusy(true);
+    const result = await request('room:seat-request', {});
+    setSeatBusy(false);
+    if (!result.ok) notify(result.error.message);
+  }
+  async function answerInvite(accept: boolean) {
+    setSeatBusy(true);
+    const result = await request('room:seat-invite-response', { accept });
+    setSeatBusy(false);
+    if (!result.ok) notify(result.error.message);
+    else if (accept) notify('Bạn đã nhận ghế chơi trong phòng!');
+  }
+  async function inviteViewer(spectatorId: string) {
+    setSeatBusy(true);
+    const result = await request('room:seat-invite', { spectatorId });
+    setSeatBusy(false);
+    if (!result.ok) notify(result.error.message);
+  }
+  async function answerSeatRequest(spectatorId: string, accept: boolean) {
+    setSeatBusy(true);
+    const result = await request('room:seat-request-response', {
+      spectatorId,
+      accept,
+    });
+    setSeatBusy(false);
+    if (!result.ok) notify(result.error.message);
+  }
   if (!room || room.code !== code)
     return (
       <div className="panel room-loading">
@@ -86,7 +115,20 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
     );
   const activeGame = game?.roomCode === code ? game : null;
   const isHost = room.hostId === session.playerId;
+  const isPlayer = room.players.some(
+    (player) => player.id === session.playerId,
+  );
+  const isSpectator = room.spectators.some(
+    (viewer) => viewer.id === session.playerId,
+  );
+  const ownSpectator = room.spectators.find(
+    (viewer) => viewer.id === session.playerId,
+  );
+  const inviterName = room.players.find(
+    (player) => player.id === ownSpectator?.invitedBy,
+  )?.nickname;
   const absent = room.players.filter((p) => !p.online);
+  const canOfferSeat = room.players.length < 2 && room.status !== 'playing';
   const canStart =
     room.players.length === 2 && absent.length === 0 && connected;
   const seconds = Math.min(
@@ -114,6 +156,9 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
             <h1>
               Cờ caro <span className="room-code-badge">{room.code}</span>
             </h1>
+            {isSpectator && (
+              <span className="label-pill spectator-role">ĐANG XEM</span>
+            )}
           </div>
         </div>
         <div className="room-actions">
@@ -144,7 +189,9 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
             color="cream"
             disabled={pending}
             onClick={() =>
-              room.status === 'playing' ? setLeaveOpen(true) : void leave()
+              room.status === 'playing' && !isSpectator
+                ? setLeaveOpen(true)
+                : void leave()
             }
           >
             Rời phòng
@@ -174,6 +221,53 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
             <small>Ván và đồng hồ đang tạm dừng.</small>
           )}
         </div>
+      )}
+      {isSpectator && (
+        <section className="spectator-seat-panel panel">
+          {ownSpectator?.invitedBy ? (
+            <>
+              <p>
+                Bạn được mời vào chơi{inviterName ? ` bởi ${inviterName}` : ''}.
+              </p>
+              <Button
+                color="green"
+                disabled={seatBusy || !connected || !canOfferSeat}
+                onClick={() => void answerInvite(true)}
+              >
+                Nhận lời mời
+              </Button>
+              <Button
+                color="cream"
+                disabled={seatBusy}
+                onClick={() => void answerInvite(false)}
+              >
+                Từ chối
+              </Button>
+              {!canOfferSeat && (
+                <small>
+                  {room.status === 'playing'
+                    ? 'Ghế sẽ mở khi ván kết thúc hoặc có người rời phòng.'
+                    : 'Phòng chưa có ghế trống; lời mời vẫn đang chờ.'}
+                </small>
+              )}
+            </>
+          ) : (
+            <>
+              <span>
+                Bạn đang xem cùng mọi người; yêu cầu vào chơi khi có ghế trống.
+              </span>
+              <Button
+                color={ownSpectator?.requestedSeat ? 'cream' : 'blue'}
+                disabled={seatBusy || !connected}
+                onClick={() => void requestSeat()}
+              >
+                {ownSpectator?.requestedSeat
+                  ? 'Hủy yêu cầu'
+                  : 'Yêu cầu vào chơi'}
+              </Button>
+            </>
+          )}
+        </section>
       )}
       <div className="room-layout">
         <div className="room-play-area">
@@ -256,6 +350,87 @@ export function RoomPage({ notify }: { notify: (text: string) => void }) {
               </div>
             )}
           </div>
+          {room.spectators.length > 0 && (
+            <div
+              className="spectator-strip panel"
+              aria-label="Spectator trong phòng"
+            >
+              <Icon name="eye" size={20} />
+              <strong>{room.spectatorCount} đang xem</strong>
+              <div className="spectator-list">
+                {room.spectators.map((viewer) => (
+                  <span key={viewer.id} className="spectator-person">
+                    <Avatar variant={viewer.avatar} size={30} />
+                    <span>
+                      {viewer.nickname}
+                      {viewer.id === session.playerId ? ' · Bạn' : ''}
+                    </span>
+                    <i
+                      className={viewer.online ? 'online-dot' : 'offline-dot'}
+                    />
+                    {viewer.invitedBy && (
+                      <small>
+                        Được mời bởi{' '}
+                        {room.players.find(
+                          (player) => player.id === viewer.invitedBy,
+                        )?.nickname ?? 'đồng đội'}
+                      </small>
+                    )}
+                    {isPlayer && canOfferSeat && viewer.online && (
+                      <Button
+                        color="cream"
+                        className="spectator-invite-button"
+                        aria-label={`Mời ${viewer.nickname} vào chơi`}
+                        disabled={seatBusy || !connected || !!viewer.invitedBy}
+                        onClick={() => void inviteViewer(viewer.id)}
+                      >
+                        {viewer.invitedBy ? 'Đã mời' : 'Mời vào chơi'}
+                      </Button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {isPlayer &&
+            room.spectators.some((viewer) => viewer.requestedSeat) && (
+              <section
+                className="seat-request-list panel"
+                aria-label="Yêu cầu vào chơi"
+              >
+                <h3>Đồng nghiệp muốn vào chơi</h3>
+                {room.spectators
+                  .filter((viewer) => viewer.requestedSeat)
+                  .map((viewer) => (
+                    <div className="seat-request-row" key={viewer.id}>
+                      <Avatar variant={viewer.avatar} size={38} />
+                      <strong>{viewer.nickname}</strong>
+                      <Button
+                        color="green"
+                        disabled={
+                          seatBusy ||
+                          !connected ||
+                          !canOfferSeat ||
+                          !viewer.online
+                        }
+                        onClick={() => void answerSeatRequest(viewer.id, true)}
+                      >
+                        Cho vào chơi
+                      </Button>
+                      <Button
+                        color="cream"
+                        disabled={seatBusy || !connected}
+                        onClick={() => void answerSeatRequest(viewer.id, false)}
+                      >
+                        Bỏ qua
+                      </Button>
+                    </div>
+                  ))}
+                {!canOfferSeat && (
+                  <small>Yêu cầu sẽ chờ đến khi ghế chơi mở.</small>
+                )}
+              </section>
+            )}
           {!activeGame ? (
             <section className="waiting-room panel">
               <GameArt game="caro" />

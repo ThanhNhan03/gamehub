@@ -412,6 +412,9 @@ svg {
 .join-or {
   font-size: 14px;
 }
+.join-form .spectator-button {
+  flex: 0 0 52px;
+}
 .join-error {
   flex-basis: 100%;
 }
@@ -1048,6 +1051,10 @@ svg {
     flex: 1;
     padding-inline: 12px;
   }
+  .join-form .spectator-button {
+    flex: 0 0 48px;
+    padding-inline: 8px;
+  }
   .code-input {
     width: 122px;
   }
@@ -1251,6 +1258,18 @@ svg {
 .room-row .button {
   margin-left: auto;
 }
+.room-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.room-row-actions .button {
+  margin-left: 0;
+}
+.room-row-actions .spectator-button {
+  flex: 0 0 52px;
+}
 .room-code-badge {
   display: inline-flex;
   align-items: center;
@@ -1289,6 +1308,10 @@ svg {
   margin: 0 0 4px;
   font-size: 14px;
 }
+.spectator-role {
+  display: inline-flex;
+  margin-top: 6px;
+}
 .room-actions {
   display: flex;
   gap: 12px;
@@ -1296,7 +1319,7 @@ svg {
 }
 .room-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.42fr);
   gap: 24px;
   align-items: start;
 }
@@ -1342,6 +1365,72 @@ svg {
 }
 .active-player .avatar {
   animation: wiggle 3s ease-in-out infinite;
+}
+.spectator-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: -4px 0 20px;
+  padding: 12px 16px;
+  background: var(--white);
+}
+.spectator-strip > strong {
+  white-space: nowrap;
+}
+.spectator-list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.spectator-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+.spectator-person .avatar {
+  flex-shrink: 0;
+}
+.spectator-seat-panel {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 14px 18px;
+  background: var(--yellow);
+}
+.spectator-seat-panel p,
+.spectator-seat-panel > span {
+  margin-right: auto;
+}
+.seat-request-list {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 16px;
+  background: var(--white);
+}
+.seat-request-list h3 {
+  font-size: 20px;
+}
+.seat-request-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px dashed var(--ink);
+}
+.seat-request-row strong {
+  margin-right: auto;
+}
+.spectator-invite-button {
+  min-height: 38px;
+  padding: 6px 12px;
+  font-size: 14px;
 }
 .turn-label {
   display: inline-block;
@@ -1603,7 +1692,7 @@ svg {
   font-size: 14px;
 }
 .chat-messages {
-  height: 340px;
+  height: 460px;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -1736,7 +1825,7 @@ svg {
 }
 @media (max-width: 1050px) {
   .room-layout {
-    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.42fr);
     gap: 16px;
   }
   .player-panels {
@@ -1908,7 +1997,7 @@ svg {
     display: none;
   }
   .dialog .chat-messages {
-    height: 45dvh;
+    height: 58dvh;
   }
   .room-row {
     flex-wrap: wrap;
@@ -1920,8 +2009,14 @@ svg {
     min-width: 160px;
   }
   .room-row .button {
-    width: 100%;
+    width: auto;
     margin: 0;
+  }
+  .room-row-actions {
+    width: 100%;
+  }
+  .room-row-actions .button:first-child {
+    flex: 1;
   }
   .resume-room {
     flex-wrap: wrap;

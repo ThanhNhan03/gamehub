@@ -5,6 +5,7 @@ import { Button, Dialog } from '../components/UI';
 import { games, type GameId } from '../lib/catalog';
 import { useGameStore } from '../store/useGameStore';
 import { request } from '../lib/socket';
+import { useSession } from '../store/useSession';
 import { Link, useNavigate } from 'react-router';
 
 export function Lobby({
@@ -25,6 +26,7 @@ export function Lobby({
   const [create, setCreate] = useState(false);
   const [busy, setBusy] = useState(false);
   const { lobby, room } = useGameStore();
+  const playerId = useSession((state) => state.playerId);
   const navigate = useNavigate();
   async function createRoom() {
     setBusy(true);
@@ -48,6 +50,16 @@ export function Lobby({
       setError(result.error.message);
       notify(result.error.message);
     } else navigate(`/room/${result.code}`);
+  }
+  async function spectateRoom(code: string) {
+    setBusy(true);
+    const result = await request('room:spectate', { code });
+    setBusy(false);
+    if (!result.ok) {
+      notify(result.error.message);
+      return;
+    }
+    navigate(`/room/${code}`);
   }
   const game = games.find((g) => g.id === selected);
   return (
@@ -120,6 +132,17 @@ export function Lobby({
           <Button type="submit" color="green" disabled={busy}>
             Vào phòng <Icon name="arrow" size={20} />
           </Button>
+          <Button
+            type="button"
+            color="cream"
+            className="icon-button spectator-button"
+            aria-label={`Xem phòng ${code || 'theo mã'} với tư cách spectator`}
+            title="Vào xem và trò chuyện, không chiếm ghế chơi"
+            disabled={busy || !/^[A-HJKMNP-Z2-9]{4}$/.test(code)}
+            onClick={() => void spectateRoom(code)}
+          >
+            <Icon name="eye" />
+          </Button>
         </form>
         <span className="join-or">hoặc</span>
         <Button color="orange" onClick={() => setCreate(true)}>
@@ -137,9 +160,15 @@ export function Lobby({
       </section>
       {room && (
         <div className="notice resume-room">
-          Bạn đang có ghế ở phòng <strong>{room.code}</strong>
+          {room.spectators.some((viewer) => viewer.id === playerId)
+            ? 'Bạn đang xem phòng'
+            : 'Bạn đang có ghế ở phòng'}{' '}
+          <strong>{room.code}</strong>
           <Link className="button bg-blue" to={`/room/${room.code}`}>
-            Về phòng
+            Về phòng{' '}
+            {room.spectators.some((viewer) => viewer.id === playerId)
+              ? 'xem'
+              : ''}
           </Link>
         </div>
       )}
@@ -202,6 +231,7 @@ export function Lobby({
                   <h3>Cờ caro</h3>
                   <p>
                     Chủ phòng: {r.hostName} · {r.count}/{r.maxPlayers} người ·{' '}
+                    {r.spectatorCount} đang xem ·{' '}
                     {r.status === 'playing'
                       ? 'Đang chơi'
                       : r.status === 'finished'
@@ -209,21 +239,33 @@ export function Lobby({
                         : 'Chờ đồng đội'}
                   </p>
                 </div>
-                <Button
-                  color="green"
-                  disabled={
-                    busy ||
-                    (r.count >= r.maxPlayers && room?.code !== r.code) ||
-                    (r.status === 'playing' && room?.code !== r.code)
-                  }
-                  onClick={() => void joinRoom(r.code)}
-                >
-                  {room?.code === r.code
-                    ? 'Về phòng'
-                    : r.count >= r.maxPlayers
-                      ? 'Đã đủ người'
-                      : 'Vào phòng'}
-                </Button>
+                <div className="room-row-actions">
+                  <Button
+                    color="green"
+                    disabled={
+                      busy ||
+                      (r.count >= r.maxPlayers && room?.code !== r.code) ||
+                      (r.status === 'playing' && room?.code !== r.code)
+                    }
+                    onClick={() => void joinRoom(r.code)}
+                  >
+                    {room?.code === r.code
+                      ? 'Về phòng'
+                      : r.count >= r.maxPlayers
+                        ? 'Đã đủ người'
+                        : 'Vào phòng'}
+                  </Button>
+                  <Button
+                    color="cream"
+                    className="icon-button spectator-button"
+                    aria-label={`Xem phòng ${r.code} với tư cách spectator`}
+                    title="Vào xem và trò chuyện cùng mọi người"
+                    disabled={busy}
+                    onClick={() => void spectateRoom(r.code)}
+                  >
+                    <Icon name="eye" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>

@@ -26,7 +26,8 @@ export function ChatPanel({
       <div className="chat-heading">
         <h2>Chuyện bên bàn</h2>
         <span className="label-pill">
-          {room.players.filter((p) => p.online).length} ONLINE
+          {[...room.players, ...room.spectators].filter((p) => p.online).length}{' '}
+          ONLINE
         </span>
       </div>
       <div

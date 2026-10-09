@@ -12,6 +12,15 @@ export const createSchema = z
   .object({ gameId: z.literal('caro'), maxPlayers: z.literal(2) })
   .strict();
 export const emptySchema = z.object({}).strict();
+export const spectatorIdSchema = z
+  .object({ spectatorId: z.string().uuid() })
+  .strict();
+export const seatRequestResponseSchema = spectatorIdSchema.extend({
+  accept: z.boolean(),
+});
+export const seatInviteResponseSchema = z
+  .object({ accept: z.boolean() })
+  .strict();
 export const actionSchema = z
   .object({
     type: z.literal('place'),

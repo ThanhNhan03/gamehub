@@ -19,6 +19,9 @@ import {
   emptySchema,
   actionSchema,
   chatSchema,
+  spectatorIdSchema,
+  seatRequestResponseSchema,
+  seatInviteResponseSchema,
   allowEvent,
 } from './socket/events.js';
 
@@ -70,7 +73,7 @@ function playerSockets(playerId: string) {
   );
 }
 function publishRoom(room: Room) {
-  for (const player of room.players) {
+  for (const player of [...room.players, ...room.spectators]) {
     const view = room.game
       ? {
           ...caro.getViewFor(room.game, player.id),
@@ -193,6 +196,31 @@ io.on('connection', (socket) => {
       rooms.join(player, data.code),
     ),
   );
+  socket.on('room:spectate', (payload, ack) =>
+    handle(socket, codeSchema, payload, ack, (data) =>
+      rooms.spectate(player, data.code),
+    ),
+  );
+  socket.on('room:seat-request', (payload, ack) =>
+    handle(socket, emptySchema, payload, ack, () =>
+      rooms.requestSeat(player.id),
+    ),
+  );
+  socket.on('room:seat-request-response', (payload, ack) =>
+    handle(socket, seatRequestResponseSchema, payload, ack, (data) =>
+      rooms.answerSeatRequest(player.id, data.spectatorId, data.accept),
+    ),
+  );
+  socket.on('room:seat-invite', (payload, ack) =>
+    handle(socket, spectatorIdSchema, payload, ack, (data) =>
+      rooms.inviteSpectator(player.id, data.spectatorId),
+    ),
+  );
+  socket.on('room:seat-invite-response', (payload, ack) =>
+    handle(socket, seatInviteResponseSchema, payload, ack, (data) =>
+      rooms.answerSeatInvite(player.id, data.accept),
+    ),
+  );
   socket.on('room:rejoin', (payload, ack) =>
     handle(socket, codeSchema, payload, ack, (data) =>
       rooms.join(player, data.code, true),
@@ -222,12 +250,7 @@ io.on('connection', (socket) => {
       chatSchema,
       payload,
       ack,
-      (data) => {
-        const { room, message } = rooms.chat(player.id, data.text);
-        for (const seat of room.players)
-          for (const recipient of playerSockets(seat.id))
-            recipient.emit('chat:message', message);
-      },
+      (data) => rooms.chat(player.id, data.text).room.code,
       true,
     ),
   );
