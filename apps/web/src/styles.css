@@ -2211,6 +2211,10 @@ svg {
 }
 .poker-game .poker-seat.is-winner .poker-avatar-ring {
   outline: 4px solid var(--green);
+  box-shadow:
+    3px 4px 0 var(--ink),
+    0 0 0 6px rgb(255 228 94 / 75%),
+    0 0 28px 12px rgb(255 111 168 / 80%);
 }
 .poker-game .poker-seat-person {
   max-width: 100%;
@@ -2299,39 +2303,46 @@ svg {
 .poker-fireworks {
   position: absolute;
   inset: 0;
-  z-index: 3;
-  overflow: hidden;
+  z-index: 4;
+  overflow: visible;
   pointer-events: none;
 }
-.poker-firework {
+.poker-fireworks i {
   position: absolute;
-  top: var(--burst-y);
-  left: var(--burst-x);
-}
-.poker-firework i {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  width: 11px;
+  height: 16px;
+  border: 2px solid var(--ink);
+  border-radius: 3px;
   background: var(--spark-color);
-  box-shadow: 0 0 10px var(--spark-color);
+  box-shadow:
+    0 0 12px 3px var(--spark-color),
+    0 0 25px 6px var(--spark-color);
   opacity: 0;
-  animation: poker-firework-burst 1.4s ease-out var(--burst-delay) 2;
+  animation: poker-firework-burst 1.7s cubic-bezier(0.15, 0.55, 0.25, 1)
+    var(--spark-delay) both;
 }
 @keyframes poker-firework-burst {
   0% {
     opacity: 0;
-    transform: scale(0);
+    transform: translate(-50%, -50%) translate(0, 0) scale(0.15) rotate(0deg);
   }
-  12% {
+  10% {
     opacity: 1;
+    transform: translate(-50%, -50%) translate(0, -8px) scale(1.35)
+      rotate(25deg);
   }
-  80% {
+  60% {
     opacity: 1;
+    transform: translate(-50%, -50%) translate(var(--spark-x), var(--spark-y))
+      scale(1) rotate(var(--spark-rotation));
   }
   100% {
     opacity: 0;
-    transform: translate(var(--spark-x), var(--spark-y)) scale(0.3);
+    transform: translate(-50%, -50%)
+      translate(var(--spark-end-x), var(--spark-end-y)) scale(0.35)
+      rotate(calc(var(--spark-rotation) + 150deg));
   }
 }
 @container poker (max-width: 650px) {

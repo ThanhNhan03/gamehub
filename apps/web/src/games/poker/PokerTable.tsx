@@ -37,6 +37,14 @@ const suitLabel: Record<PokerCard['suit'], string> = {
 };
 const stages = ['Preflop', 'Flop', 'Turn', 'River', 'Showdown'];
 const format = (amount: number) => amount.toLocaleString('vi-VN');
+const fireworkColors = [
+  '#FF6FA8',
+  '#4CC2FF',
+  '#5BD98B',
+  '#9B7BFF',
+  '#FF9A3C',
+  '#FFE45E',
+];
 
 // Seats and their bets run clockwise from the local player's bottom seat.
 const layouts: Record<number, number[][]> = {
@@ -476,48 +484,6 @@ export function PokerTable({
 
       <div className="poker-table" data-player-count={players.length}>
         <div className="poker-felt" aria-hidden="true" />
-        {roundOver && (game.payouts.length > 0 || game.winnerId) && (
-          <div
-            className="poker-fireworks"
-            key={game.handNumber}
-            aria-hidden="true"
-          >
-            {Array.from({ length: 3 }, (_, burst) => (
-              <div
-                className="poker-firework"
-                key={burst}
-                style={
-                  {
-                    '--burst-x': [22, 50, 78][burst] + '%',
-                    '--burst-y': [36, 22, 36][burst] + '%',
-                    '--burst-delay': burst * 0.3 + 's',
-                  } as CSSProperties
-                }
-              >
-                {Array.from({ length: 16 }, (_, particle) => {
-                  const angle = (particle * Math.PI) / 8;
-                  return (
-                    <i
-                      key={particle}
-                      style={
-                        {
-                          '--spark-x': Math.cos(angle) * 105 + 'px',
-                          '--spark-y': Math.sin(angle) * 105 + 'px',
-                          '--spark-color': [
-                            'var(--pink)',
-                            'var(--blue)',
-                            'var(--yellow)',
-                            'var(--orange)',
-                          ][particle % 4],
-                        } as CSSProperties
-                      }
-                    />
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        )}
         <div className="poker-center">
           <span className="poker-pot-total">
             <Chip />
@@ -576,6 +542,7 @@ export function PokerTable({
           const payout = game.payouts.find(
             (item) => item.playerId === player.id,
           );
+          const isWinner = Boolean(payout) || player.id === game.winnerId;
           const roomSeat = room.players.find((item) => item.id === player.id);
           const badges = [
             player.id === game.dealerId && 'D',
@@ -643,7 +610,7 @@ export function PokerTable({
                   isSelf && 'is-you',
                   isTurn && 'is-turn',
                   player.folded && 'is-folded',
-                  payout && 'is-winner',
+                  isWinner && 'is-winner',
                   player.waiting && 'is-waiting',
                 ]
                   .filter(Boolean)
@@ -696,6 +663,39 @@ export function PokerTable({
                         />
                       </svg>
                     )}
+                    {roundOver && isWinner && (
+                      <div
+                        className="poker-fireworks"
+                        key={`${game.handNumber}-${player.id}`}
+                        aria-hidden="true"
+                      >
+                        {Array.from({ length: 24 }, (_, particle) => {
+                          const angle = (particle * Math.PI * 2) / 24;
+                          const distance = 92 + (particle % 3) * 13;
+                          const sparkX = Math.cos(angle) * distance;
+                          const sparkY = Math.sin(angle) * distance * 0.78;
+                          return (
+                            <i
+                              key={particle}
+                              style={
+                                {
+                                  '--spark-x': `${sparkX}px`,
+                                  '--spark-y': `${sparkY}px`,
+                                  '--spark-end-x': `${sparkX * 1.35}px`,
+                                  '--spark-end-y': `${sparkY * 1.35 + 48}px`,
+                                  '--spark-color':
+                                    fireworkColors[
+                                      particle % fireworkColors.length
+                                    ],
+                                  '--spark-delay': `${(particle % 5) * 0.035}s`,
+                                  '--spark-rotation': `${particle * 37}deg`,
+                                } as CSSProperties
+                              }
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div className="poker-seat-person">
                     <strong>
@@ -731,7 +731,7 @@ export function PokerTable({
                     <span
                       className={[
                         'poker-status-pill',
-                        payout && 'is-win',
+                        isWinner && 'is-win',
                         player.allIn && 'is-all-in',
                         player.folded && 'is-fold',
                         isTurn && 'is-active',
